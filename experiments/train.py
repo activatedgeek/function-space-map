@@ -24,7 +24,10 @@ def train_step_fn(state, b_X, b_Y):
         logits, new_state = state.apply_fn({ 'params': params, 'batch_stats': batch_stats }, b_X,
                                             train=True, mutable=['batch_stats'])
 
+        
         loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logits, b_Y))
+        # loss = loss + weight_decay * sum([jnp.vdot(p, p) for p in jax.tree_util.tree_leaves(params)]) / 2
+
         return loss, new_state
 
     (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params,state.batch_stats)
@@ -34,11 +37,11 @@ def train_step_fn(state, b_X, b_Y):
     return final_state, loss
 
 
-def train_model(state, loader, log_dir=None, epoch=None):
+def train_model(state, loader, step_fn=train_step_fn, log_dir=None, epoch=None):
     for i, (X, Y) in tqdm(enumerate(loader), leave=False):
         X, Y = X.numpy(), Y.numpy()
 
-        state, loss = train_step_fn(state, X, Y)
+        state, loss = step_fn(state, X, Y)
 
         if log_dir is not None and i % 100 == 0:
             metrics = { 'epoch': epoch, 'mini_loss': loss.item() }
@@ -53,12 +56,12 @@ def eval_step_fn(state, b_X, b_Y):
     logits = state.apply_fn({ 'params': state.params, 'batch_stats': state.batch_stats}, b_X,
                             train=False, mutable=False)
 
-    loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logits, b_Y))
+    nll = jnp.sum(optax.softmax_cross_entropy_with_integer_labels(logits, b_Y))
 
-    return logits, loss
+    return logits, nll
 
 
-def eval_model(state, loader):
+def eval_model(state, loader, step_fn=eval_step_fn):
     N = len(loader.dataset)
     N_acc = 0
     nll = 0.
@@ -66,10 +69,10 @@ def eval_model(state, loader):
     for X, Y in tqdm(loader, leave=False):
         X, Y = X.numpy(), Y.numpy()
 
-        logits, loss = eval_step_fn(state, X, Y)
-        pred_Y = jnp.argmax(logits, axis=-1)
+        _logits, _nll = step_fn(state, X, Y)
+        pred_Y = jnp.argmax(_logits, axis=-1)
         N_acc += jnp.sum(pred_Y == Y)
-        nll += loss * X.shape[0]
+        nll += _nll
 
     return { 'acc': N_acc / N, 'nll': nll, 'avg_nll': nll / N }
 
@@ -77,7 +80,7 @@ def eval_model(state, loader):
 def main(seed=42, log_dir=None, data_dir=None,
          ckpt_path=None,
          dataset=None, batch_size=128, num_workers=4,
-         lr=.1, momentum=.9, weight_decay=0.,
+         optimizer='sgd', lr=.1, momentum=.9, weight_decay=0.,
          epochs=0):
 
     rng = jax.random.PRNGKey(seed)
@@ -98,11 +101,16 @@ def main(seed=42, log_dir=None, data_dir=None,
         rng, model_init_rng = jax.random.split(rng)
         init_variables = model.init(model_init_rng, train_data[0][0].numpy()[None, ...], train=False)
 
-    # optimizer = optax.adamw(learning_rate=lr, weight_decay=weight_decay)
-    optimizer = optax.chain(
-        optax.add_decayed_weights(weight_decay),
-        optax.sgd(learning_rate=lr, momentum=momentum),
-    )
+    if optimizer == 'adamw':
+        optimizer = optax.adamw(learning_rate=lr, weight_decay=weight_decay)
+    elif optimizer == 'sgd':
+        optimizer = optax.chain(
+            optax.add_decayed_weights(weight_decay),
+            optax.sgd(learning_rate=lr, momentum=momentum),
+        )
+    else:
+        raise NotImplementedError
+
     train_state = TrainState.create(
         apply_fn=model.apply,
         params=init_variables['params'],

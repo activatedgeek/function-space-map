@@ -8,7 +8,7 @@ import torchvision.transforms as transforms
 from .utils.data import get_data_dir, train_test_split
 
 
-def get_fmnist(root=None, seed=42, **_):
+def get_fmnist(root=None, seed=42, val_size=.2, **_):
     _FMNIST_TRANSFORM = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.2861,), (0.3530,)),
@@ -18,7 +18,10 @@ def get_fmnist(root=None, seed=42, **_):
     train_data = create_dataset('torch/fashion_mnist', root=root, split='train',
                                 transform=_FMNIST_TRANSFORM, download=True)
 
-    train_data, val_data = train_test_split(train_data, test_size=.1, seed=seed)
+    if val_size > 0.:
+        train_data, val_data = train_test_split(train_data, test_size=val_size, seed=seed)
+    else:
+        val_data = None
 
     test_data = create_dataset('torch/fashion_mnist', root=root, split='test',
                                transform=_FMNIST_TRANSFORM, download=True)
