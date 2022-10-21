@@ -11,7 +11,7 @@ from .utils.data import get_data_dir, train_test_split
 def get_fmnist(root=None, seed=42, **_):
     _FMNIST_TRANSFORM = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((.5,), (.5,)),
+        transforms.Normalize((0.2861,), (0.3530,)),
         transforms.Lambda(lambda img: img.permute(1, 2, 0)) ## Convert to HxWxC from CxHxW
     ])
 

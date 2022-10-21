@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 import jax
 import jax.numpy as jnp
 import flax
+import flax.linen as nn
 from flax.training import train_state, checkpoints
 import optax
 import flaxmodels as fm
@@ -76,7 +77,7 @@ def eval_model(state, loader):
 def main(seed=42, log_dir=None, data_dir=None,
          ckpt_path=None,
          dataset=None, batch_size=128, num_workers=4,
-         lr=.1, weight_decay=5e-4,
+         lr=.1, momentum=.9, weight_decay=0.,
          epochs=0):
 
     rng = jax.random.PRNGKey(seed)
@@ -87,7 +88,9 @@ def main(seed=42, log_dir=None, data_dir=None,
     val_loader = DataLoader(val_data, batch_size=batch_size, num_workers=num_workers)
     test_loader = DataLoader(test_data, batch_size=batch_size, num_workers=num_workers)
 
-    model = fm.ResNet18(output='logits', pretrained=None, normalize=False, num_classes=train_data.n_classes)
+    model = fm.ResNet18(
+        output='logits', num_classes=train_data.n_classes,
+        pretrained=None, normalize=False, kernel_init=nn.initializers.kaiming_normal())
     if ckpt_path is not None:
         init_variables = checkpoints.restore_checkpoint(ckpt_dir=ckpt_path, target=None)
         logging.info(f'Loaded checkpoint from "{ckpt_path}".')
@@ -95,7 +98,11 @@ def main(seed=42, log_dir=None, data_dir=None,
         rng, model_init_rng = jax.random.split(rng)
         init_variables = model.init(model_init_rng, train_data[0][0].numpy()[None, ...], train=False)
 
-    optimizer = optax.adamw(learning_rate=lr, weight_decay=weight_decay)
+    # optimizer = optax.adamw(learning_rate=lr, weight_decay=weight_decay)
+    optimizer = optax.chain(
+        optax.add_decayed_weights(weight_decay),
+        optax.sgd(learning_rate=lr, momentum=momentum),
+    )
     train_state = TrainState.create(
         apply_fn=model.apply,
         params=init_variables['params'],
