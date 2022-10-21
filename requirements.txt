@@ -9,6 +9,7 @@ numpy
 scipy
 pandas
 scikit-learn
+tensorflow
 torch
 torchvision
 timm

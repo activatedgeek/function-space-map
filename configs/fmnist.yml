@@ -1,0 +1,24 @@
+name: fmnist-resnet18
+method: grid
+parameters:
+  lr:
+    values:
+      - 1e-3
+      - 1e-2
+      - 1e-1
+  weight_decay:
+    values:
+      - 1e-6
+      - 1e-5
+      - 1e-4
+  seed:
+    values:
+      - 137
+program: experiments/train.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - --dataset=fmnist
+  - --epochs=500
+  - ${args}
