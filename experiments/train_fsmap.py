@@ -13,13 +13,13 @@ from fspace.utils.training import TrainState, train_model, eval_model
 
 
 @jax.jit
-def train_step_fn(state, b_X, b_Y):
+def train_step_fn(state, b_X, b_Y, func_decay):
     def loss_fn(params, batch_stats):
         logits, new_state = state.apply_fn({ 'params': params, 'batch_stats': batch_stats }, b_X,
                                             mutable=['batch_stats'], train=True)
 
         loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logits, b_Y))
-        # loss = loss + weight_decay * sum([jnp.vdot(p, p) for p in jax.tree_util.tree_leaves(params)]) / 2
+        loss = loss + func_decay * jnp.vdot(logits, logits) / 2
 
         return loss, new_state
 
@@ -43,7 +43,7 @@ def eval_step_fn(state, b_X, b_Y):
 def main(seed=42, log_dir=None, data_dir=None,
          ckpt_path=None,
          dataset=None, batch_size=128, num_workers=4,
-         optimizer='sgd', lr=.1, momentum=.9, weight_decay=0.,
+         optimizer='sgd', lr=.1, momentum=.9, func_decay=0.,
          epochs=0):
 
     rng = jax.random.PRNGKey(seed)
@@ -63,12 +63,9 @@ def main(seed=42, log_dir=None, data_dir=None,
         init_variables = model.init(model_init_rng, train_data[0][0].numpy()[None, ...])
 
     if optimizer == 'adamw':
-        optimizer = optax.adamw(learning_rate=lr, weight_decay=weight_decay)
+        optimizer = optax.adamw(learning_rate=lr)
     elif optimizer == 'sgd':
-        optimizer = optax.chain(
-            optax.add_decayed_weights(weight_decay),
-            optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader), 1e-4), momentum=momentum),
-        )
+        optimizer = optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader), 1e-4), momentum=momentum)
     else:
         raise NotImplementedError
 
@@ -78,7 +75,8 @@ def main(seed=42, log_dir=None, data_dir=None,
         batch_stats=init_variables['batch_stats'],
         tx=optimizer)
 
-    train_fn = lambda *args, **kwargs: train_model(*args, train_step_fn, **kwargs)
+    step_fn = lambda *args: train_step_fn(*args, func_decay)
+    train_fn = lambda *args, **kwargs: train_model(*args, step_fn, **kwargs)
     eval_fn = lambda *args: eval_model(*args, eval_step_fn)
 
     best_acc_so_far = 0.

@@ -8,7 +8,7 @@ import torchvision.transforms as transforms
 from .utils.data import get_data_dir, train_test_split
 
 
-def get_fmnist(root=None, seed=42, val_size=0.16, **_):
+def get_fmnist(root=None, seed=42, val_size=1/6, **_):
     _FMNIST_TRANSFORM = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.2861,), (0.3530,)),
