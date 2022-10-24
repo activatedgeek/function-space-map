@@ -18,4 +18,3 @@ flax
 optax
 distrax
 blackjax
-flaxmodels@git+https://github.com/matthias-wright/flaxmodels.git

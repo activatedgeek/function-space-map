@@ -16,7 +16,7 @@ command:
   - ${interpreter}
   - ${program}
   - --dataset=fmnist
-  - --batch-size=64
+  - --batch-size=128
   - --optimizer=sgd
-  - --epochs=500
+  - --epochs=200
   - ${args}

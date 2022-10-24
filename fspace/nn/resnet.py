@@ -118,6 +118,46 @@ class ResNet(nn.Module):
     return x
 
 
+class MResNet(nn.Module):
+  """Modified ResNetV1."""
+  stage_sizes: Sequence[int]
+  block_cls: ModuleDef
+  num_classes: int
+  num_filters: int = 64
+  dtype: Any = jnp.float32
+  act: Callable = nn.relu
+  conv: ModuleDef = nn.Conv
+
+  @nn.compact
+  def __call__(self, x, train: bool = True):
+    conv = partial(self.conv, use_bias=False, dtype=self.dtype)
+    norm = partial(nn.BatchNorm,
+                   use_running_average=not train,
+                   momentum=0.9,
+                   epsilon=1e-5,
+                   dtype=self.dtype)
+
+    ## NOTE: Changed kernel size.
+    x = conv(self.num_filters, (3, 3), (1, 1),
+             padding=[(1, 1), (1, 1)],
+             name='conv_init')(x)
+    x = norm(name='bn_init')(x)
+    x = nn.relu(x)
+    x = nn.max_pool(x, (3, 3), strides=(2, 2), padding='SAME')
+    for i, block_size in enumerate(self.stage_sizes):
+      for j in range(block_size):
+        strides = (2, 2) if i > 0 and j == 0 else (1, 1)
+        x = self.block_cls(self.num_filters * 2 ** i,
+                           strides=strides,
+                           conv=conv,
+                           norm=norm,
+                           act=self.act)(x)
+    x = jnp.mean(x, axis=(1, 2))
+    x = nn.Dense(self.num_classes, dtype=self.dtype)(x)
+    x = jnp.asarray(x, self.dtype)
+    return x
+
+
 ResNet18 = partial(ResNet, stage_sizes=[2, 2, 2, 2],
                    block_cls=ResNetBlock)
 ResNet34 = partial(ResNet, stage_sizes=[3, 4, 6, 3],
@@ -140,3 +180,7 @@ ResNet18Local = partial(ResNet, stage_sizes=[2, 2, 2, 2],
 _ResNet1 = partial(ResNet, stage_sizes=[1], block_cls=ResNetBlock)
 _ResNet1Local = partial(ResNet, stage_sizes=[1], block_cls=ResNetBlock,
                         conv=nn.ConvLocal)
+
+
+MResNet18 = partial(MResNet, stage_sizes=[2, 2, 2, 2],
+                   block_cls=ResNetBlock)

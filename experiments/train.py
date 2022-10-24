@@ -9,7 +9,7 @@ import optax
 
 from fspace.utils.logging import set_logging, finish_logging, wandb
 from fspace.datasets import get_dataset
-from fspace.nn import ResNet18
+from fspace.nn import MResNet18
 
 
 ## Override to have batch statistics.
@@ -89,7 +89,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     val_loader = DataLoader(val_data, batch_size=batch_size, num_workers=num_workers)
     test_loader = DataLoader(test_data, batch_size=batch_size, num_workers=num_workers)
 
-    model = ResNet18(num_classes=train_data.n_classes)
+    model = MResNet18(num_classes=train_data.n_classes)
     if ckpt_path is not None:
         init_variables = checkpoints.restore_checkpoint(ckpt_dir=ckpt_path, target=None)
         logging.info(f'Loaded checkpoint from "{ckpt_path}".')
@@ -118,16 +118,16 @@ def main(seed=42, log_dir=None, data_dir=None,
         train_state = train_model(train_state, train_loader, log_dir=log_dir, epoch=e)
         
         val_metrics = eval_model(train_state, val_loader)
-        logging.info(val_metrics, extra=dict(metrics=True, prefix='sgd/val'))
+        logging.info({ 'epoch': e, **val_metrics }, extra=dict(metrics=True, prefix='sgd/val'))
 
         if val_metrics['acc'] > best_acc_so_far:
             best_acc_so_far = val_metrics['acc']
 
             train_metrics = eval_model(train_state, train_loader)
-            logging.info(train_metrics, extra=dict(metrics=True, prefix='sgd/train'))
+            logging.info({ 'epoch': e, **train_metrics }, extra=dict(metrics=True, prefix='sgd/train'))
 
             test_metrics = eval_model(train_state, test_loader)
-            logging.info(test_metrics, extra=dict(metrics=True, prefix='sgd/test'))
+            logging.info({ 'epoch': e, **test_metrics }, extra=dict(metrics=True, prefix='sgd/test'))
 
             wandb.run.summary['val/best_epoch'] = e
             wandb.run.summary['train/best_acc'] = train_metrics['acc']
