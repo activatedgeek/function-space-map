@@ -4,13 +4,12 @@ from torch.utils.data import DataLoader
 import jax
 import jax.numpy as jnp
 import flax
-import flax.linen as nn
 from flax.training import train_state, checkpoints
 import optax
-import flaxmodels as fm
 
 from fspace.utils.logging import set_logging, finish_logging, wandb
 from fspace.datasets import get_dataset
+from fspace.nn import ResNet18
 
 
 ## Override to have batch statistics.
@@ -22,9 +21,8 @@ class TrainState(train_state.TrainState):
 def train_step_fn(state, b_X, b_Y):
     def loss_fn(params, batch_stats):
         logits, new_state = state.apply_fn({ 'params': params, 'batch_stats': batch_stats }, b_X,
-                                            train=True, mutable=['batch_stats'])
+                                            mutable=['batch_stats'], train=True)
 
-        
         loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logits, b_Y))
         # loss = loss + weight_decay * sum([jnp.vdot(p, p) for p in jax.tree_util.tree_leaves(params)]) / 2
 
@@ -54,7 +52,7 @@ def train_model(state, loader, step_fn=train_step_fn, log_dir=None, epoch=None):
 @jax.jit
 def eval_step_fn(state, b_X, b_Y):
     logits = state.apply_fn({ 'params': state.params, 'batch_stats': state.batch_stats}, b_X,
-                            train=False, mutable=False)
+                            mutable=False, train=False)
 
     nll = jnp.sum(optax.softmax_cross_entropy_with_integer_labels(logits, b_Y))
 
@@ -91,22 +89,20 @@ def main(seed=42, log_dir=None, data_dir=None,
     val_loader = DataLoader(val_data, batch_size=batch_size, num_workers=num_workers)
     test_loader = DataLoader(test_data, batch_size=batch_size, num_workers=num_workers)
 
-    model = fm.ResNet18(
-        output='logits', num_classes=train_data.n_classes,
-        pretrained=None, normalize=False, kernel_init=nn.initializers.kaiming_normal())
+    model = ResNet18(num_classes=train_data.n_classes)
     if ckpt_path is not None:
         init_variables = checkpoints.restore_checkpoint(ckpt_dir=ckpt_path, target=None)
         logging.info(f'Loaded checkpoint from "{ckpt_path}".')
     else:
         rng, model_init_rng = jax.random.split(rng)
-        init_variables = model.init(model_init_rng, train_data[0][0].numpy()[None, ...], train=False)
+        init_variables = model.init(model_init_rng, train_data[0][0].numpy()[None, ...])
 
     if optimizer == 'adamw':
         optimizer = optax.adamw(learning_rate=lr, weight_decay=weight_decay)
     elif optimizer == 'sgd':
         optimizer = optax.chain(
             optax.add_decayed_weights(weight_decay),
-            optax.sgd(learning_rate=lr, momentum=momentum),
+            optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader), 1e-4), momentum=momentum),
         )
     else:
         raise NotImplementedError
@@ -138,7 +134,7 @@ def main(seed=42, log_dir=None, data_dir=None,
             wandb.run.summary['val/best_acc'] = val_metrics['acc']
             wandb.run.summary['test/best_acc'] = test_metrics['acc']
 
-            logging.info(f"Epoch {e}: {best_acc_so_far:.4f} (Val) / {test_metrics['acc']:.4f} (Test)")
+            logging.info(f"Epoch {e}: {train_metrics['acc']:.4f} (Train) / {val_metrics['acc']:.4f} (Val) / {test_metrics['acc']:.4f} (Test)")
 
             checkpoints.save_checkpoint(ckpt_dir=log_dir,
                                         target={'params': train_state.params,

@@ -8,7 +8,7 @@ import torchvision.transforms as transforms
 from .utils.data import get_data_dir, train_test_split
 
 
-def get_fmnist(root=None, seed=42, val_size=.2, **_):
+def get_fmnist(root=None, seed=42, val_size=0.16, **_):
     _FMNIST_TRANSFORM = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.2861,), (0.3530,)),
@@ -31,7 +31,7 @@ def get_fmnist(root=None, seed=42, val_size=.2, **_):
 
 _DATASET_CFG = {
     'fmnist': {
-        'num_classes': 10,
+        'n_classes': 10,
         'get_fn': get_fmnist,
     },
 }
@@ -44,7 +44,7 @@ def get_dataset(dataset, root=None, train_subset=1, **kwargs):
 
     train_data, val_data, test_data = _DATASET_CFG[dataset].get('get_fn')(root=root, **kwargs)
 
-    num_classes = _DATASET_CFG[dataset].get('num_classes')
+    n_classes = _DATASET_CFG[dataset].get('n_classes')
 
     if np.abs(train_subset) < 1:
         n = len(train_data)
@@ -56,7 +56,7 @@ def get_dataset(dataset, root=None, train_subset=1, **kwargs):
 
         train_data = Subset(train_data, randperm)
 
-    setattr(train_data, 'n_classes', num_classes)
+    setattr(train_data, 'n_classes', n_classes)
 
     logging.info(f'Train Dataset Size: {len(train_data)};  Test Dataset Size: {len(test_data)}')
 

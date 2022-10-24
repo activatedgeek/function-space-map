@@ -3,22 +3,20 @@ method: grid
 parameters:
   lr:
     values:
-      - 1e-3
-      - 1e-2
-      - 1e-1
+      - 0.1
   weight_decay:
     values:
-      - 1e-6
-      - 1e-5
-      - 1e-4
+      - 2e-5
   seed:
     values:
-      - 137
+      - 42
 program: experiments/train.py
 command:
   - ${env}
   - ${interpreter}
   - ${program}
   - --dataset=fmnist
+  - --batch-size=64
+  - --optimizer=sgd
   - --epochs=500
   - ${args}
