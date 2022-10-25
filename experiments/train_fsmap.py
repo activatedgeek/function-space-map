@@ -14,8 +14,8 @@ from fspace.utils.training import TrainState, train_model, eval_model
 
 @jax.jit
 def train_step_fn(state, b_X, b_Y, func_decay):
-    def loss_fn(params, batch_stats):
-        logits, new_state = state.apply_fn({ 'params': params, 'batch_stats': batch_stats }, b_X,
+    def loss_fn(params, **extra_vars):
+        logits, new_state = state.apply_fn({ 'params': params, **extra_vars }, b_X,
                                             mutable=['batch_stats'], train=True)
 
         loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logits, b_Y))
@@ -23,16 +23,16 @@ def train_step_fn(state, b_X, b_Y, func_decay):
 
         return loss, new_state
 
-    (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params,state.batch_stats)
+    (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params, **state.extra_vars)
 
-    final_state = state.apply_gradients(grads=grads, batch_stats=new_state['batch_stats'])
+    final_state = state.apply_gradients(grads=grads, **new_state)
 
     return final_state, loss
 
 
 @jax.jit
 def eval_step_fn(state, b_X, b_Y):
-    logits = state.apply_fn({ 'params': state.params, 'batch_stats': state.batch_stats}, b_X,
+    logits = state.apply_fn({ 'params': state.params, **state.extra_vars}, b_X,
                             mutable=False, train=False)
 
     nll = jnp.sum(optax.softmax_cross_entropy_with_integer_labels(logits, b_Y))
@@ -56,11 +56,12 @@ def main(seed=42, log_dir=None, data_dir=None,
 
     model = MResNet18(num_classes=train_data.n_classes)
     if ckpt_path is not None:
-        init_variables = checkpoints.restore_checkpoint(ckpt_dir=ckpt_path, target=None)
+        init_vars = checkpoints.restore_checkpoint(ckpt_dir=ckpt_path, target=None)
         logging.info(f'Loaded checkpoint from "{ckpt_path}".')
     else:
         rng, model_init_rng = jax.random.split(rng)
-        init_variables = model.init(model_init_rng, train_data[0][0].numpy()[None, ...])
+        init_vars = model.init(model_init_rng, train_data[0][0].numpy()[None, ...])
+    other_vars, params = init_vars.pop('params')
 
     if optimizer == 'adamw':
         optimizer = optax.adamw(learning_rate=lr)
@@ -71,8 +72,8 @@ def main(seed=42, log_dir=None, data_dir=None,
 
     train_state = TrainState.create(
         apply_fn=model.apply,
-        params=init_variables['params'],
-        batch_stats=init_variables['batch_stats'],
+        params=params,
+        **other_vars,
         tx=optimizer)
 
     step_fn = lambda *args: train_step_fn(*args, func_decay)
@@ -103,8 +104,7 @@ def main(seed=42, log_dir=None, data_dir=None,
             logging.info(f"Epoch {e}: {train_metrics['acc']:.4f} (Train) / {val_metrics['acc']:.4f} (Val) / {test_metrics['acc']:.4f} (Test)")
 
             checkpoints.save_checkpoint(ckpt_dir=log_dir,
-                                        target={'params': train_state.params,
-                                                'batch_stats': train_state.batch_stats},
+                                        target={'params': train_state.params, **train_state.extra_vars},
                                         step=e,
                                         overwrite=True)
 

@@ -5,9 +5,17 @@ import flax
 from flax.training import train_state
 
 
-## Override to have batch statistics.
+## Override for extra state variables.
 class TrainState(train_state.TrainState):
-    batch_stats: flax.core.FrozenDict
+    batch_stats: flax.core.FrozenDict = None
+
+    @property
+    def extra_vars(self):
+        return {
+            v: getattr(self, v)
+            for v in ['batch_stats']
+            if isinstance(getattr(self, v), flax.core.FrozenDict)
+        }
 
 
 def train_model(state, loader, step_fn, log_dir=None, epoch=None):
