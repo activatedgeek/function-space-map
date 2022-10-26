@@ -46,6 +46,18 @@ def main(seed=42, log_dir=None, data_dir=None,
          optimizer='sgd', lr=.1, momentum=.9, func_decay=0.,
          epochs=0):
 
+    wandb.config.update({
+        'seed': seed,
+        'ckpt_path': ckpt_path,
+        'dataset': dataset,
+        'batch_size': batch_size,
+        'optimizer': optimizer,
+        'lr': lr,
+        'momentum': momentum,
+        'func_decay': func_decay,
+        'epochs': epochs,
+    })
+
     rng = jax.random.PRNGKey(seed)
 
     train_data, val_data, test_data = get_dataset(dataset, root=data_dir, seed=seed)
