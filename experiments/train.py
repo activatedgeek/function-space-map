@@ -8,7 +8,7 @@ import optax
 
 from fspace.utils.logging import set_logging, finish_logging, wandb
 from fspace.datasets import get_dataset
-from fspace.nn import MResNet18, SmallCNN
+from fspace.nn import create_model
 from fspace.utils.training import TrainState, train_model, eval_model
 
 
@@ -41,13 +41,14 @@ def eval_step_fn(state, b_X, b_Y):
 
 
 def main(seed=42, log_dir=None, data_dir=None,
-         ckpt_path=None,
+         model_name=None, ckpt_path=None,
          dataset=None, batch_size=128, num_workers=4,
          optimizer='sgd', lr=.1, momentum=.9, weight_decay=0.,
          epochs=0):
 
     wandb.config.update({
         'seed': seed,
+        'model_name': model_name,
         'ckpt_path': ckpt_path,
         'dataset': dataset,
         'batch_size': batch_size,
@@ -66,7 +67,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     val_loader = DataLoader(val_data, batch_size=batch_size, num_workers=num_workers)
     test_loader = DataLoader(test_data, batch_size=batch_size, num_workers=num_workers)
 
-    model = MResNet18(num_classes=train_data.n_classes)
+    model = create_model(model_name, num_classes=train_data.n_classes)
     if ckpt_path is not None:
         init_vars = checkpoints.restore_checkpoint(ckpt_dir=ckpt_path, target=None)
         logging.info(f'Loaded checkpoint from "{ckpt_path}".')
@@ -98,7 +99,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     for e in tqdm(range(epochs)):
         train_state = train_fn(train_state, train_loader, log_dir=log_dir, epoch=e)
         
-        val_metrics = eval_fn(train_state, val_loader)
+        val_metrics = eval_fn(train_state, val_loader if val_loader.dataset is not None else test_loader)
         logging.info({ 'epoch': e, **val_metrics }, extra=dict(metrics=True, prefix='sgd/val'))
 
         if val_metrics['acc'] > best_acc_so_far:
