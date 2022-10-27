@@ -8,11 +8,15 @@ import torchvision.transforms as transforms
 from .utils.data import get_data_dir, train_test_split
 
 
+## Convert from CxHxW to HxWxC for Flax.
+chw2hwc_fn = lambda img: img.permute(1, 2, 0)
+
+
 def get_fmnist(root=None, seed=42, val_size=1/6, **_):
     _FMNIST_TRANSFORM = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.2861,), (0.3530,)),
-        transforms.Lambda(lambda img: img.permute(1, 2, 0)) ## Convert to HxWxC from CxHxW
+        transforms.Lambda(chw2hwc_fn)
     ])
 
     train_data = create_dataset('torch/fashion_mnist', root=root, split='train',
@@ -29,10 +33,42 @@ def get_fmnist(root=None, seed=42, val_size=1/6, **_):
     return train_data, val_data, test_data
 
 
+def get_cifar10(root=None, seed=42, val_size=.1, **_):
+    _CIFAR10_TRAIN_TRANSFORM = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize((.4914, .4822, .4465), (.247, .243, .261)),
+        transforms.Lambda(chw2hwc_fn)
+    ])
+    _CIFAR10_TEST_TRANSFORM = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((.4914, .4822, .4465), (.247, .243, .261)),
+        transforms.Lambda(chw2hwc_fn)
+    ])
+
+    train_data = create_dataset('torch/cifar10', root=root, split='train',
+                                transform=_CIFAR10_TRAIN_TRANSFORM, download=True)
+
+    if val_size > 0.:
+        train_data, val_data = train_test_split(train_data, test_size=val_size, seed=seed)
+    else:
+        val_data = None
+
+    test_data = create_dataset('torch/cifar10', root=root, split='test',
+                               transform=_CIFAR10_TEST_TRANSFORM, download=True)
+
+    return train_data, val_data, test_data
+
+
 _DATASET_CFG = {
     'fmnist': {
         'n_classes': 10,
         'get_fn': get_fmnist,
+    },
+    'cifar10': {
+        'n_classes': 10,
+        'get_fn': get_cifar10,
     },
 }
 
