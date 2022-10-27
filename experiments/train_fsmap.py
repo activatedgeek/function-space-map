@@ -42,7 +42,7 @@ def eval_step_fn(state, b_X, b_Y):
 
 def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
-         dataset=None, batch_size=128, num_workers=4,
+         dataset=None, train_subset=1., batch_size=128, num_workers=4,
          optimizer='sgd', lr=.1, momentum=.9, func_decay=0.,
          epochs=0):
 
@@ -51,6 +51,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         'model_name': model_name,
         'ckpt_path': ckpt_path,
         'dataset': dataset,
+        'train_subset': train_subset,
         'batch_size': batch_size,
         'optimizer': optimizer,
         'lr': lr,
@@ -61,7 +62,7 @@ def main(seed=42, log_dir=None, data_dir=None,
 
     rng = jax.random.PRNGKey(seed)
 
-    train_data, val_data, test_data = get_dataset(dataset, root=data_dir, seed=seed)
+    train_data, val_data, test_data = get_dataset(dataset, root=data_dir, seed=seed, train_subset=train_subset)
     train_loader = DataLoader(train_data, batch_size=batch_size, num_workers=num_workers,
                               shuffle=True)
     val_loader = DataLoader(val_data, batch_size=batch_size, num_workers=num_workers)
