@@ -5,7 +5,7 @@ from torch.utils.data import Subset
 from timm.data import create_dataset
 import torchvision.transforms as transforms
 
-from .utils.data import get_data_dir, train_test_split
+from .utils.data import get_data_dir, train_test_split, LabelNoiseDataset
 
 
 ## Convert from CxHxW to HxWxC for Flax.
@@ -73,21 +73,25 @@ _DATASET_CFG = {
 }
 
 
-def get_dataset(dataset, root=None, train_subset=1, **kwargs):
+def get_dataset(dataset, root=None, seed=42, train_subset=1, label_noise=0, **kwargs):
     assert dataset in _DATASET_CFG, f'Dataset "{dataset}" not supported'
 
     root = get_data_dir(data_dir=root)
 
-    train_data, val_data, test_data = _DATASET_CFG[dataset].get('get_fn')(root=root, **kwargs)
+    train_data, val_data, test_data = _DATASET_CFG[dataset].get('get_fn')(root=root, seed=seed, **kwargs)
 
     n_classes = _DATASET_CFG[dataset].get('n_classes')
+
+    if label_noise > 0:
+        train_data = LabelNoiseDataset(
+            train_data, n_labels=n_classes, label_noise=label_noise, seed=seed)
 
     if np.abs(train_subset) < 1:
         n = len(train_data)
         ns = int(n * np.abs(train_subset))
 
         ## NOTE: -ve train_subset fraction to get latter segment.
-        randperm = torch.randperm(n)
+        randperm = torch.randperm(n, generator=torch.Generator().manual_seed(seed))
         randperm = randperm[ns:] if train_subset < 0 else randperm[:ns]
 
         train_data = Subset(train_data, randperm)
