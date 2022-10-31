@@ -83,7 +83,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     if optimizer == 'adamw':
         optimizer = optax.adamw(learning_rate=lr)
     elif optimizer == 'sgd':
-        optimizer = optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader), 1e-4), momentum=momentum)
+        optimizer = optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader), 1e-3), momentum=momentum)
     else:
         raise NotImplementedError
 
