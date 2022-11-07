@@ -33,7 +33,7 @@ def get_fmnist(root=None, seed=42, val_size=1/6, **_):
     return train_data, val_data, test_data
 
 
-def get_cifar10(root=None, seed=42, val_size=.1, **_):
+def get_cifar10(root=None, seed=42, val_size=0., **_):
     _CIFAR10_TRAIN_TRANSFORM = transforms.Compose([
         transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(),
