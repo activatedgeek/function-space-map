@@ -1,0 +1,22 @@
+name: fmnist-resnet18-fsmap
+method: grid
+parameters:
+  lr:
+    values:
+      - 0.1
+  func_decay:
+    values:
+      - 2e-5
+  seed:
+    values:
+      - 42
+program: experiments/train_fsmap.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - --dataset=fmnist
+  - --batch-size=128
+  - --optimizer=sgd
+  - --epochs=200
+  - ${args}
