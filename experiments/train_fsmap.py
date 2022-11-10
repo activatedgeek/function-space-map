@@ -9,17 +9,39 @@ import optax
 from fspace.utils.logging import set_logging, finish_logging, wandb
 from fspace.datasets import get_dataset
 from fspace.nn import create_model
-from fspace.utils.training import TrainState, train_model, eval_model
+from fspace.utils.training import TrainState, eval_model
+from fspace.utils.random import tree_split
 
 
 @jax.jit
-def train_step_fn(state, b_X, b_Y, func_decay):
+def train_step_fn(rng_trees, state, b_X, b_Y, func_decay):
+    def sample_delta_fn(rng_tree, logits):
+        ## @NOTE: Assumes zero mean param, small eps.
+        def sample_param(key, param):
+            return 1e-4 * jax.random.normal(key, param.shape, param.dtype)
+
+        sample_params = jax.tree_util.tree_map(sample_param, rng_tree, state.params)
+        sample_logits = state.apply_fn({ 'params': sample_params, **state.extra_vars}, b_X,
+                                        mutable=False, train=False)
+        sample_delta = logits - jax.lax.stop_gradient(sample_logits)
+        return sample_delta
+
     def loss_fn(params, **extra_vars):
         logits, new_state = state.apply_fn({ 'params': params, **extra_vars }, b_X,
                                             mutable=['batch_stats'], train=True)
 
         loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logits, b_Y))
-        loss = loss + func_decay * jnp.vdot(logits, logits) / 2
+
+        if len(rng_trees):
+            reg_loss = []
+            for rng_tree in rng_trees:
+                sample_delta = sample_delta_fn(rng_tree, logits)
+                reg_loss.append(jnp.vdot(sample_delta, sample_delta))
+            reg_loss = - jax.nn.logsumexp(- func_decay * jnp.array(reg_loss) / 2)
+        else:
+            reg_loss = func_decay * jnp.vdot(logits, logits) / 2
+
+        loss = loss + reg_loss
 
         return loss, new_state
 
@@ -40,11 +62,30 @@ def eval_step_fn(state, b_X, b_Y):
     return logits, nll
 
 
+def train_model(rng, state, loader, step_fn, n_samples, log_dir=None, epoch=None):
+    for i, (X, Y) in tqdm(enumerate(loader), leave=False):
+        rng_trees = []
+        for _ in range(n_samples):
+            rng, _tree = tree_split(rng, state.params)
+            rng_trees.append(_tree)
+
+        X, Y = X.numpy(), Y.numpy()
+
+        state, loss = step_fn(rng_trees, state, X, Y)
+
+        if log_dir is not None and i % 100 == 0:
+            metrics = { 'epoch': epoch, 'mini_loss': loss.item() }
+            logging.info(metrics, extra=dict(metrics=True, prefix='sgd/train'))
+            logging.debug(f'Epoch {epoch}: {loss.item():.4f}')
+
+    return state
+
+
 def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
          dataset=None, train_subset=1., label_noise=0.,
          batch_size=128, num_workers=4,
-         optimizer='sgd', lr=.1, momentum=.9, func_decay=0.,
+         optimizer='sgd', lr=.1, momentum=.9, func_decay=0., n_samples=0,
          epochs=0):
 
     wandb.config.update({
@@ -94,7 +135,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         tx=optimizer)
 
     step_fn = lambda *args: train_step_fn(*args, func_decay)
-    train_fn = lambda *args, **kwargs: train_model(*args, step_fn, **kwargs)
+    train_fn = lambda *args, **kwargs: train_model(rng, *args, step_fn, n_samples, **kwargs)
     eval_fn = lambda *args: eval_model(*args, eval_step_fn)
 
     best_acc_so_far = 0.
