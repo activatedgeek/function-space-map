@@ -14,11 +14,11 @@ from fspace.utils.random import tree_split
 
 
 @jax.jit
-def train_step_fn(rng_trees, state, b_X, b_Y, func_decay):
+def train_step_fn(rng_trees, state, b_X, b_Y, func_decay, noise_std=1e-4):
     def sample_delta_fn(rng_tree, logits):
-        ## @NOTE: Assumes zero mean param, small eps.
+        ## @NOTE: Assumes zero mean param.
         def sample_param(key, param):
-            return 1e-4 * jax.random.normal(key, param.shape, param.dtype)
+            return noise_std * jax.random.normal(key, param.shape, param.dtype)
 
         sample_params = jax.tree_util.tree_map(sample_param, rng_tree, state.params)
         sample_logits = state.apply_fn({ 'params': sample_params, **state.extra_vars}, b_X,
@@ -85,7 +85,7 @@ def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
          dataset=None, train_subset=1., label_noise=0.,
          batch_size=128, num_workers=4,
-         optimizer='sgd', lr=.1, momentum=.9, func_decay=0., n_samples=0,
+         optimizer='sgd', lr=.1, momentum=.9, func_decay=0., n_samples=0, noise_std=1e-4,
          epochs=0):
 
     wandb.config.update({
@@ -100,6 +100,8 @@ def main(seed=42, log_dir=None, data_dir=None,
         'lr': lr,
         'momentum': momentum,
         'func_decay': func_decay,
+        'n_samples': n_samples,
+        'noise_std': noise_std,
         'epochs': epochs,
     })
 
@@ -134,7 +136,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         **other_vars,
         tx=optimizer)
 
-    step_fn = lambda *args: train_step_fn(*args, func_decay)
+    step_fn = lambda *args: train_step_fn(*args, func_decay, noise_std=noise_std)
     train_fn = lambda *args, **kwargs: train_model(rng, *args, step_fn, n_samples, **kwargs)
     eval_fn = lambda *args: eval_model(*args, eval_step_fn)
 
