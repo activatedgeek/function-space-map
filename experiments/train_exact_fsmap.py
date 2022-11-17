@@ -5,29 +5,76 @@ import jax
 import jax.numpy as jnp
 from flax.training import checkpoints
 import optax
+from functools import partial
 
 from fspace.utils.logging import set_logging, finish_logging, wandb
 from fspace.datasets import get_dataset
 from fspace.nn import create_model
-from fspace.utils.training import TrainState, train_model, eval_model
+from fspace.utils.training import TrainState, eval_model
 
+def jacobian_sigular_values(jac_fn, p, x, **extra_vars):
+    j = jac_fn(p, x, **extra_vars)
+    j = jax.tree_util.tree_map(lambda x: jnp.einsum('b...->...b', x), j)
+    # flatten j
+    J, _ = jax.flatten_util.ravel_pytree(j)
+    num_params = jax.flatten_util.ravel_pytree(p)[0].shape[0]
+    J = J.reshape(num_params, -1).T # (N, P)
+    print('J:', J.shape)
 
-@jax.jit
-def train_step_fn(state, b_X, b_Y):
+    # sigular values of J
+    S = jnp.linalg.svd(J, compute_uv=False)
+    print('S:', S.shape)
+    return S
+
+def log_det_H(jac_fn, p, x, jitter, **extra_vars):
+    # log det J^T J = sum log s^2 (careful, check this for more general cases when J is not injective)
+    s = jacobian_sigular_values(jac_fn, p, x, **extra_vars)
+    s = s + jitter
+    logdet_svd = 2 * jnp.sum(jnp.log(s))
+    return logdet_svd
+
+def log_frobenius_J(jac_fn, p, x, jitter, **extra_vars):
+    # s(J) <= ||J||_f, log s(J) <= log ||J||_f
+    j = jac_fn(p, x, **extra_vars)
+    j = jax.tree_util.tree_map(lambda x: jnp.einsum('b...->...b', x), j)
+    # flatten j
+    J, _ = jax.flatten_util.ravel_pytree(j)
+    num_params = jax.flatten_util.ravel_pytree(p)[0].shape[0]
+    J = J.reshape(num_params, -1).T # (N, P)
+    print('J:', J.shape)
+    f_norm = jnp.linalg.norm(J, ord='fro')
+    # 2 * jnp.sum(jnp.log(s)) <= 2 * min(n * c, p) *jnp.log(f_norm + jitter)
+    return 2 * jnp.log(f_norm + jitter) #* min(J.shape[0], J.shape[1])
+
+def train_step_fn(state, b_X, b_Y, b_X_eval, log_det_fn, n_train):
     def loss_fn(params, **extra_vars):
         logits, new_state = state.apply_fn({ 'params': params, **extra_vars }, b_X,
                                             mutable=['batch_stats'], train=True)
-
+        print('out shape:', logits.shape)
         loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logits, b_Y))
-        # loss = loss + weight_decay * sum([jnp.vdot(p, p) for p in jax.tree_util.tree_leaves(params)]) / 2
+        fs_loss = 1 / 2 * log_det_fn(params, b_X_eval, **extra_vars) / n_train
+        loss = (loss + fs_loss) 
 
-        return loss, new_state
+        return loss, (fs_loss, new_state)
 
-    (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params, **state.extra_vars)
+    (loss, aux), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params, **state.extra_vars)
+    fs_loss, new_state = aux
 
     final_state = state.apply_gradients(grads=grads, **new_state)
 
-    return final_state, loss
+    return final_state, loss, fs_loss
+
+def train_model(state, loader, step_fn, log_dir=None, epoch=None):
+    for i, (X, Y) in tqdm(enumerate(loader), leave=False):
+        X, Y = X.numpy(), Y.numpy()
+        X_eval = X
+        state, loss, fs_loss = step_fn(state, X, Y, X_eval)
+        if log_dir is not None and i % 100 == 0:
+            metrics = { 'epoch': epoch, 'mini_loss': loss.item(), 'fs_loss': fs_loss.item(), 'ce_loss': loss.item() - fs_loss.item()}
+            logging.info(metrics, extra=dict(metrics=True, prefix='sgd/train'))
+            logging.debug(f'Epoch {epoch}: {loss.item():.4f}')
+
+    return state
 
 
 @jax.jit
@@ -44,7 +91,7 @@ def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None, run_name=None,
          dataset=None, train_subset=1., label_noise=0.,
          batch_size=128, num_workers=4,
-         optimizer='sgd', lr=.1, momentum=.9, weight_decay=0.,
+         optimizer='sgd', lr=.1, momentum=.9, weight_decay=0., jitter=1e-5,
          epochs=0):
     wandb.init(dir=log_dir, project='fspace', name=run_name)
     wandb.config.update({
@@ -78,7 +125,11 @@ def main(seed=42, log_dir=None, data_dir=None,
     else:
         rng, model_init_rng = jax.random.split(rng)
         init_vars = model.init(model_init_rng, train_data[0][0].numpy()[None, ...])
-    other_vars, params = init_vars.pop('params')
+    params = init_vars.pop('params')
+    if len(params) == 2:
+        other_vars, params = params
+    else:
+        other_vars = {}
 
     if optimizer == 'adamw':
         optimizer = optax.adamw(learning_rate=lr, weight_decay=weight_decay)
@@ -95,8 +146,10 @@ def main(seed=42, log_dir=None, data_dir=None,
         params=params,
         **other_vars,
         tx=optimizer)
-
-    train_fn = lambda *args, **kwargs: train_model(*args, train_step_fn, **kwargs)
+    
+    jac_fn = jax.jacrev(lambda p, x, **extra_vars: model.apply({'params': p, **extra_vars}, x, train=False).reshape(-1))
+    step_fn = jax.jit(lambda *args: train_step_fn(*args, log_det_fn=lambda p, x, **extra: log_det_H(jac_fn, p, x, jitter, **extra), n_train=len(train_data)))
+    train_fn = lambda *args, **kwargs: train_model(*args, step_fn, **kwargs)
     eval_fn = lambda *args: eval_model(*args, eval_step_fn)
 
     best_acc_so_far = 0.

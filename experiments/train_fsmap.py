@@ -82,13 +82,15 @@ def train_model(rng, state, loader, step_fn, n_samples, log_dir=None, epoch=None
 
 
 def main(seed=42, log_dir=None, data_dir=None,
-         model_name=None, ckpt_path=None,
+         model_name=None, ckpt_path=None, run_name=None,
          dataset=None, train_subset=1., label_noise=0.,
          batch_size=128, num_workers=4,
          optimizer='sgd', lr=.1, momentum=.9, func_decay=0., n_samples=0, noise_std=1e-4,
          epochs=0):
-
+    
+    wandb.init(dir=log_dir, project='fspace', name=run_name)
     wandb.config.update({
+        'log_dir': log_dir,
         'seed': seed,
         'model_name': model_name,
         'ckpt_path': ckpt_path,

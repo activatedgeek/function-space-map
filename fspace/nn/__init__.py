@@ -1,4 +1,4 @@
-from .cnn import SmallCNN
+from .cnn import SmallCNN, TinyCNN
 from .resnet import MResNet18, ResNet18
 
 
@@ -11,6 +11,9 @@ __MODEL_CFG = {
     },
     'smallcnn': {
         'model_cls': SmallCNN,
+    },
+    'tinycnn': {
+        'model_cls': TinyCNN,
     }
 }
 

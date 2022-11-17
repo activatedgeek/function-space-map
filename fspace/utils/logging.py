@@ -38,7 +38,7 @@ class WnBHandler(logging.Handler):
     def emit(self, record):
         metrics = record.msg
         if hasattr(record, 'prefix'):
-            metrics = {f'{record.prefix}/{k}': v for k, v in metrics.items()}
+            metrics = {f'{record.prefix}/{k}' if k != 'epoch' else k: v for k, v in metrics.items()}
         wandb.log(metrics)
 
 ### END: WandB related. ###
@@ -103,10 +103,10 @@ def get_log_dir(log_dir=None):
 
 
 def set_logging(metrics_extra_key='metrics', log_dir=None):
-    wandb.init(
-        mode=os.environ.get('WANDB_MODE', default='offline'),
-        settings=wandb.Settings(start_method="fork"),
-    )
+    # wandb.init(
+    #     mode=os.environ.get('WANDB_MODE', default='offline'),
+    #     settings=wandb.Settings(start_method="fork"),
+    # )
 
     log_dir = get_log_dir(log_dir=log_dir)
 

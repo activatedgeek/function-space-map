@@ -17,3 +17,20 @@ class SmallCNN(nn.Module):
     x = nn.relu(x)
     x = nn.Dense(features=self.num_classes)(x)
     return x
+
+class TinyCNN(nn.Module):
+  num_classes: int
+
+  @nn.compact
+  def __call__(self, x, train: bool = False):
+    x = nn.Conv(features=8, kernel_size=(3, 3))(x)
+    x = nn.elu(x)
+    x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
+    x = nn.Conv(features=8, kernel_size=(3, 3))(x)
+    x = nn.elu(x)
+    x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
+    x = x.reshape((x.shape[0], -1))
+    x = nn.Dense(features=32)(x)
+    x = nn.elu(x)
+    x = nn.Dense(features=self.num_classes)(x)
+    return x
