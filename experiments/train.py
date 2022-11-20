@@ -41,12 +41,11 @@ def eval_step_fn(state, b_X, b_Y):
 
 
 def main(seed=42, log_dir=None, data_dir=None,
-         model_name=None, ckpt_path=None, run_name=None,
+         model_name=None, ckpt_path=None,
          dataset=None, train_subset=1., label_noise=0.,
          batch_size=128, num_workers=4,
          optimizer='sgd', lr=.1, momentum=.9, weight_decay=0.,
          epochs=0):
-    wandb.init(dir=log_dir, project='fspace', name=run_name)
     wandb.config.update({
         'log_dir': log_dir,
         'seed': seed,

@@ -3,6 +3,7 @@ from tqdm.auto import tqdm
 import jax.numpy as jnp
 import flax
 from flax.training import train_state
+import optax
 
 
 ## Override for extra state variables.
@@ -17,6 +18,30 @@ class TrainState(train_state.TrainState):
             if isinstance(getattr(self, v), flax.core.FrozenDict)
         }
 
+    def apply_gradients(self, *, grads, loss, **kwargs):
+        """Updates `step`, `params`, `opt_state` and `**kwargs` in return value.
+
+        Note that internally this function calls `.tx.update()` followed by a call
+        to `optax.apply_updates()` to update `params` and `opt_state`.
+
+        Args:
+        grads: Gradients that have the same pytree structure as `.params`.
+        **kwargs: Additional dataclass attributes that should be `.replace()`-ed.
+
+        Returns:
+        An updated instance of `self` with `step` incremented by one, `params`
+        and `opt_state` updated by applying `grads`, and additional attributes
+        replaced as specified by `kwargs`.
+        """
+        updates, new_opt_state = self.tx.update(
+            grads, self.opt_state, self.params, extra_args={ 'loss': loss })
+        new_params = optax.apply_updates(self.params, updates)
+        return self.replace(
+            step=self.step + 1,
+            params=new_params,
+            opt_state=new_opt_state,
+            **kwargs,
+        )
 
 def train_model(state, loader, step_fn, log_dir=None, epoch=None):
     for i, (X, Y) in tqdm(enumerate(loader), leave=False):
