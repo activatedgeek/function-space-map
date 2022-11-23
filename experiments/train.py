@@ -84,7 +84,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     elif optimizer == 'sgd':
         optimizer = optax.chain(
             optax.add_decayed_weights(weight_decay),
-            optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader), 1e-3), momentum=momentum),
+            optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader)), momentum=momentum),
         )
     else:
         raise NotImplementedError

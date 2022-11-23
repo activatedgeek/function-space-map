@@ -39,7 +39,7 @@ def train_step_fn(rng_trees, state, b_X, b_Y, func_decay, noise_std=1e-4):
                 reg_loss.append(jnp.vdot(sample_delta, sample_delta))
             reg_loss = - jax.nn.logsumexp(- func_decay * jnp.array(reg_loss) / 2)
         else:
-            reg_loss = func_decay * jnp.vdot(logits, logits) / 2
+            reg_loss = func_decay * jnp.sum(optax.l2_loss(logits))
 
         loss = loss + reg_loss
 
@@ -126,7 +126,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     if optimizer == 'adamw':
         optimizer = optax.adamw(learning_rate=lr)
     elif optimizer == 'sgd':
-        optimizer = optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader), 1e-3), momentum=momentum)
+        optimizer = optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader)), momentum=momentum)
     # elif optimizer == 'lro':
     #     from learned_optimization.research.general_lopt import prefab
     #     optimizer = prefab.optax_lopt(epochs * len(train_loader))
