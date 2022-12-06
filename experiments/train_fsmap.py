@@ -5,6 +5,7 @@ import jax
 import jax.numpy as jnp
 from flax.training import checkpoints
 import optax
+import timm
 
 from fspace.utils.logging import set_logging, finish_logging, wandb
 from fspace.datasets import get_dataset
@@ -14,17 +15,17 @@ from fspace.utils.random import tree_split
 
 
 @jax.jit
-def train_step_fn(rng_trees, state, b_X, b_Y, func_decay, noise_std=1e-4):
-    def sample_delta_fn(rng_tree, logits):
-        ## @NOTE: Assumes zero mean param.
-        def sample_param(key, param):
-            return noise_std * jax.random.normal(key, param.shape, param.dtype)
+def train_step_fn(_, state, b_X, b_Y, b_X_ctx, func_decay):
+    # def sample_delta_fn(rng_tree, logits):
+    #     ## @NOTE: Assumes zero mean param.
+    #     def sample_param(key, param):
+    #         return noise_std * jax.random.normal(key, param.shape, param.dtype)
 
-        sample_params = jax.tree_util.tree_map(sample_param, rng_tree, state.params)
-        sample_logits = state.apply_fn({ 'params': sample_params, **state.extra_vars}, b_X,
-                                        mutable=False, train=False)
-        sample_delta = logits - jax.lax.stop_gradient(sample_logits)
-        return sample_delta
+    #     sample_params = jax.tree_util.tree_map(sample_param, rng_tree, state.params)
+    #     sample_logits = state.apply_fn({ 'params': sample_params, **state.extra_vars}, b_X_ctx,
+    #                                     mutable=False, train=False)
+    #     sample_delta = logits - jax.lax.stop_gradient(sample_logits)
+    #     return sample_delta
 
     def loss_fn(params, **extra_vars):
         logits, new_state = state.apply_fn({ 'params': params, **extra_vars }, b_X,
@@ -32,14 +33,17 @@ def train_step_fn(rng_trees, state, b_X, b_Y, func_decay, noise_std=1e-4):
 
         loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logits, b_Y))
 
-        if len(rng_trees):
-            reg_loss = []
-            for rng_tree in rng_trees:
-                sample_delta = sample_delta_fn(rng_tree, logits)
-                reg_loss.append(jnp.vdot(sample_delta, sample_delta))
-            reg_loss = - jax.nn.logsumexp(- func_decay * jnp.array(reg_loss) / 2)
-        else:
-            reg_loss = func_decay * jnp.sum(optax.l2_loss(logits))
+        ctx_logits, _ = state.apply_fn({ 'params': params, **extra_vars }, b_X_ctx,
+                                        mutable=['batch_stats'], train=True)
+
+        reg_loss = func_decay * jnp.sum(optax.l2_loss(ctx_logits))
+
+        # if len(rng_trees):
+        #     reg_loss = []
+        #     for rng_tree in rng_trees:
+        #         sample_delta = sample_delta_fn(rng_tree, logits)
+        #         reg_loss.append(jnp.vdot(sample_delta, sample_delta))
+        #     reg_loss = - jax.nn.logsumexp(- func_decay * jnp.array(reg_loss) / 2)
 
         loss = loss + reg_loss
 
@@ -62,16 +66,22 @@ def eval_step_fn(state, b_X, b_Y):
     return logits, nll
 
 
-def train_model(rng, state, loader, step_fn, n_samples, log_dir=None, epoch=None):
+def train_model(rng, state, loader, ctx_loader, step_fn, log_dir=None, epoch=None):
+    ctx_iter = iter(ctx_loader)
+
     for i, (X, Y) in tqdm(enumerate(loader), leave=False):
-        rng_trees = []
-        for _ in range(n_samples):
-            rng, _tree = tree_split(rng, state.params)
-            rng_trees.append(_tree)
+        try:
+            X_ctx, _ = next(ctx_iter)
+        except StopIteration:
+            ctx_iter = iter(ctx_loader)
+            X_ctx, _ = next(ctx_iter)
 
-        X, Y = X.numpy(), Y.numpy()
+        # rng_trees = []
+        # for _ in range(n_samples):
+        #     rng, _tree = tree_split(rng, state.params)
+        #     rng_trees.append(_tree)
 
-        state, loss = step_fn(rng_trees, state, X, Y)
+        state, loss = step_fn(rng, state, X.numpy(), Y.numpy(), X_ctx.numpy())
 
         if log_dir is not None and i % 100 == 0:
             metrics = { 'epoch': epoch, 'mini_loss': loss.item() }
@@ -83,9 +93,9 @@ def train_model(rng, state, loader, step_fn, n_samples, log_dir=None, epoch=None
 
 def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
-         dataset=None, train_subset=1., label_noise=0.,
+         dataset=None, ctx_dataset=None, train_subset=1., label_noise=0.,
          batch_size=128, num_workers=4,
-         optimizer='sgd', lr=.1, momentum=.9, func_decay=0., n_samples=0, noise_std=1e-4,
+         optimizer='sgd', lr=.1, momentum=.9, func_decay=0.,
          epochs=0):
     wandb.config.update({
         'log_dir': log_dir,
@@ -93,6 +103,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         'model_name': model_name,
         'ckpt_path': ckpt_path,
         'dataset': dataset,
+        'ctx_dataset': ctx_dataset,
         'train_subset': train_subset,
         'label_noise': label_noise,
         'batch_size': batch_size,
@@ -100,8 +111,6 @@ def main(seed=42, log_dir=None, data_dir=None,
         'lr': lr,
         'momentum': momentum,
         'func_decay': func_decay,
-        'n_samples': n_samples,
-        'noise_std': noise_std,
         'epochs': epochs,
     })
 
@@ -113,6 +122,15 @@ def main(seed=42, log_dir=None, data_dir=None,
                               shuffle=True)
     val_loader = DataLoader(val_data, batch_size=batch_size, num_workers=num_workers)
     test_loader = DataLoader(test_data, batch_size=batch_size, num_workers=num_workers)
+
+    if ctx_dataset is not None:
+        ctx_data = get_dataset(ctx_dataset, root=data_dir, is_ctx=True, batch_size=batch_size, seed=seed)
+        ctx_loader = DataLoader(ctx_data, batch_size=batch_size, num_workers=num_workers,
+                                shuffle=not isinstance(ctx_data, timm.data.IterableImageDataset))
+
+        logging.info(f'Using {ctx_dataset} for context samples.')
+    else:
+        ctx_loader = train_loader
 
     model = create_model(model_name, num_classes=train_data.n_classes)
     if ckpt_path is not None:
@@ -139,13 +157,13 @@ def main(seed=42, log_dir=None, data_dir=None,
         **other_vars,
         tx=optimizer)
 
-    step_fn = lambda *args: train_step_fn(*args, func_decay, noise_std=noise_std)
-    train_fn = lambda *args, **kwargs: train_model(rng, *args, step_fn, n_samples, **kwargs)
+    step_fn = lambda *args: train_step_fn(*args, func_decay)
+    train_fn = lambda *args, **kwargs: train_model(rng, *args, step_fn, **kwargs)
     eval_fn = lambda *args: eval_model(*args, eval_step_fn)
 
     best_acc_so_far = 0.
     for e in tqdm(range(epochs)):
-        train_state = train_fn(train_state, train_loader, log_dir=log_dir, epoch=e)
+        train_state = train_fn(train_state, train_loader, ctx_loader, log_dir=log_dir, epoch=e)
         
         val_metrics = eval_fn(train_state, val_loader if val_loader.dataset is not None else test_loader)
         logging.info({ 'epoch': e, **val_metrics }, extra=dict(metrics=True, prefix='sgd/val'))
