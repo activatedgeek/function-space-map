@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 import jax
 import jax.numpy as jnp
 from flax.training import checkpoints
+from flax.core.frozen_dict import freeze
 import optax
 
 from fspace.utils.logging import set_logging, finish_logging, wandb
@@ -72,7 +73,7 @@ def main(seed=42, log_dir=None, data_dir=None,
 
     model = create_model(model_name, num_classes=train_data.n_classes)
     if ckpt_path is not None:
-        init_vars = checkpoints.restore_checkpoint(ckpt_dir=ckpt_path, target=None)
+        init_vars = freeze(checkpoints.restore_checkpoint(ckpt_dir=ckpt_path, target=None))
         logging.info(f'Loaded checkpoint from "{ckpt_path}".')
     else:
         rng, model_init_rng = jax.random.split(rng)
