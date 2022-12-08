@@ -11,7 +11,6 @@ from fspace.utils.logging import set_logging, finish_logging, wandb
 from fspace.datasets import get_dataset
 from fspace.nn import create_model
 from fspace.utils.training import TrainState, eval_model
-from fspace.utils.random import tree_split
 
 
 @jax.jit

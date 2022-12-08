@@ -3,7 +3,8 @@ from tqdm.auto import tqdm
 import jax.numpy as jnp
 import flax
 from flax.training import train_state
-import optax
+import jax
+from scipy import stats
 
 
 ## Override for extra state variables.
@@ -37,13 +38,26 @@ def eval_model(state, loader, step_fn):
     N = len(loader.dataset)
     N_acc = 0
     nll = 0.
+    all_ent = []
 
     for X, Y in tqdm(loader, leave=False):
         X, Y = X.numpy(), Y.numpy()
 
         _logits, _nll = step_fn(state, X, Y)
+        p_Y = jax.nn.softmax(_logits, axis=-1)
         pred_Y = jnp.argmax(_logits, axis=-1)
+        
         N_acc += jnp.sum(pred_Y == Y)
         nll += _nll
+        all_ent.append(stats.multinomial(1, p_Y).entropy())
+    all_ent = jnp.concatenate(all_ent)
+    avg_ent = jnp.mean(all_ent, axis=0)
+    std_ent = jnp.std(all_ent, axis=0)
 
-    return { 'acc': N_acc / N, 'nll': nll, 'avg_nll': nll / N }
+    return {
+        'acc': N_acc / N,
+        'nll': nll,
+        'avg_nll': nll / N,
+        'avg_ent': avg_ent,
+        'std_ent': std_ent,
+    }
