@@ -127,6 +127,10 @@ def get_dataset(dataset, root=None, seed=42, train_subset=1, label_noise=0, is_c
         train_data = Subset(train_data, randperm)
 
     setattr(train_data, 'n_classes', n_classes)
+    if val_data is not None:
+        setattr(val_data, 'n_classes', n_classes)
+    if test_data is not None:
+        setattr(test_data, 'n_classes', n_classes)
 
     logging.info(f'Train Dataset Size: {len(train_data)};  Test Dataset Size: {len(test_data)}')
 

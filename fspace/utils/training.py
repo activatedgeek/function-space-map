@@ -6,6 +6,8 @@ from flax.training import train_state
 import jax
 from scipy import stats
 
+from  .third_party.calibration import calibration
+
 
 ## Override for extra state variables.
 class TrainState(train_state.TrainState):
@@ -38,21 +40,29 @@ def eval_model(state, loader, step_fn):
     N = len(loader.dataset)
     N_acc = 0
     nll = 0.
-    all_ent = []
+    all_logits = []
+    all_Y = []
 
     for X, Y in tqdm(loader, leave=False):
         X, Y = X.numpy(), Y.numpy()
 
         _logits, _nll = step_fn(state, X, Y)
-        p_Y = jax.nn.softmax(_logits, axis=-1)
         pred_Y = jnp.argmax(_logits, axis=-1)
         
         N_acc += jnp.sum(pred_Y == Y)
         nll += _nll
-        all_ent.append(stats.multinomial(1, p_Y).entropy())
-    all_ent = jnp.concatenate(all_ent)
+
+        all_logits.append(_logits)
+        all_Y.append(Y)
+    
+    all_logits = jnp.concatenate(all_logits)
+    all_Y = jnp.concatenate(all_Y)
+    all_p = jax.nn.softmax(all_logits, axis=-1)
+    
+    all_ent = stats.multinomial(1, all_p).entropy()
     avg_ent = jnp.mean(all_ent, axis=0)
     std_ent = jnp.std(all_ent, axis=0)
+    ece, _ = calibration(jax.nn.one_hot(all_Y, loader.dataset.n_classes), all_p, num_bins=10)
 
     return {
         'acc': N_acc / N,
@@ -60,4 +70,5 @@ def eval_model(state, loader, step_fn):
         'avg_nll': nll / N,
         'avg_ent': avg_ent,
         'std_ent': std_ent,
+        'ece': ece,
     }
