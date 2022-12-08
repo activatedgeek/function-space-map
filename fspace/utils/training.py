@@ -60,8 +60,8 @@ def eval_model(state, loader, step_fn):
     all_p = jax.nn.softmax(all_logits, axis=-1)
     
     all_ent = stats.multinomial(1, all_p).entropy()
-    avg_ent = jnp.mean(all_ent, axis=0)
-    std_ent = jnp.std(all_ent, axis=0)
+    avg_ent = jnp.nanmean(all_ent, axis=0)
+    std_ent = jnp.nanstd(all_ent, axis=0)
     ece, _ = calibration(jax.nn.one_hot(all_Y, loader.dataset.n_classes), all_p, num_bins=10)
 
     return {
