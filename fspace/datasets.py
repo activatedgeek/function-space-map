@@ -66,7 +66,7 @@ def get_cifar10(root=None, seed=42, val_size=0., v1=False, corrupted=False, batc
                                     transform=_CIFAR10_TEST_TRANSFORM, download=True)
     else:
         test_data = create_dataset('torch/cifar10', root=root, split='test',
-                                transform=_CIFAR10_TEST_TRANSFORM, download=True)
+                                    transform=_CIFAR10_TEST_TRANSFORM, download=True)
 
     return train_data, val_data, test_data
 

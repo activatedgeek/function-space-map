@@ -33,10 +33,13 @@ def train_step_fn(_, state, b_X, b_Y, b_X_ctx, func_decay):
 
         loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logits, b_Y))
 
-        ctx_logits, _ = state.apply_fn({ 'params': params, **extra_vars }, b_X_ctx,
-                                        mutable=['batch_stats'], train=True)
+        reg_loss = jnp.sum(optax.l2_loss(logits))
 
-        reg_loss = func_decay * jnp.sum(optax.l2_loss(ctx_logits))
+        if b_X_ctx is not None:
+            ctx_logits, _ = state.apply_fn({ 'params': params, **extra_vars }, b_X_ctx,
+                                            mutable=['batch_stats'], train=True)
+            
+            reg_loss += jnp.sum(optax.l2_loss(ctx_logits))
 
         # if len(rng_trees):
         #     reg_loss = []
@@ -45,9 +48,9 @@ def train_step_fn(_, state, b_X, b_Y, b_X_ctx, func_decay):
         #         reg_loss.append(jnp.vdot(sample_delta, sample_delta))
         #     reg_loss = - jax.nn.logsumexp(- func_decay * jnp.array(reg_loss) / 2)
 
-        loss = loss + reg_loss
+        total_loss = loss + func_decay * reg_loss
 
-        return loss, new_state
+        return total_loss, new_state
 
     (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params, **state.extra_vars)
 
@@ -66,22 +69,25 @@ def eval_step_fn(state, b_X, b_Y):
     return logits, nll
 
 
-def train_model(rng, state, loader, ctx_loader, step_fn, log_dir=None, epoch=None):
-    ctx_iter = iter(ctx_loader)
+def train_model(rng, state, loader, step_fn, ctx_loader=None, log_dir=None, epoch=None):
+    ctx_iter = iter(ctx_loader or [[None, None]])
 
     for i, (X, Y) in tqdm(enumerate(loader), leave=False):
+        X, Y = X.numpy(), Y.numpy()
         try:
             X_ctx, _ = next(ctx_iter)
         except StopIteration:
-            ctx_iter = iter(ctx_loader)
+            ctx_iter = iter(ctx_loader or [[None, None]])
             X_ctx, _ = next(ctx_iter)
+        if X_ctx is not None:
+            X_ctx = X_ctx.numpy()
 
         # rng_trees = []
         # for _ in range(n_samples):
         #     rng, _tree = tree_split(rng, state.params)
         #     rng_trees.append(_tree)
 
-        state, loss = step_fn(rng, state, X.numpy(), Y.numpy(), X_ctx.numpy())
+        state, loss = step_fn(rng, state, X, Y, X_ctx)
 
         if log_dir is not None and i % 100 == 0:
             metrics = { 'epoch': epoch, 'mini_loss': loss.item() }
@@ -123,14 +129,12 @@ def main(seed=42, log_dir=None, data_dir=None,
     val_loader = DataLoader(val_data, batch_size=batch_size, num_workers=num_workers)
     test_loader = DataLoader(test_data, batch_size=batch_size, num_workers=num_workers)
 
+    ctx_loader = None
     if ctx_dataset is not None:
         ctx_data = get_dataset(ctx_dataset, root=data_dir, is_ctx=True, batch_size=batch_size, seed=seed)
         ctx_loader = DataLoader(ctx_data, batch_size=batch_size, num_workers=num_workers,
                                 shuffle=not isinstance(ctx_data, timm.data.IterableImageDataset))
-
-        logging.info(f'Using {ctx_dataset} for context samples.')
-    else:
-        ctx_loader = train_loader
+        logging.debug(f'Using {ctx_dataset} for context samples.')
 
     model = create_model(model_name, num_classes=train_data.n_classes)
     if ckpt_path is not None:
@@ -158,12 +162,13 @@ def main(seed=42, log_dir=None, data_dir=None,
         tx=optimizer)
 
     step_fn = lambda *args: train_step_fn(*args, func_decay)
-    train_fn = lambda *args, **kwargs: train_model(rng, *args, step_fn, **kwargs)
+    train_fn = lambda *args, **kwargs: train_model(rng, *args, train_loader, step_fn, 
+                                                   ctx_loader=ctx_loader, log_dir=log_dir, **kwargs)
     eval_fn = lambda *args: eval_model(*args, eval_step_fn)
 
     best_acc_so_far = 0.
     for e in tqdm(range(epochs)):
-        train_state = train_fn(train_state, train_loader, ctx_loader, log_dir=log_dir, epoch=e)
+        train_state = train_fn(train_state, epoch=e)
         
         val_metrics = eval_fn(train_state, val_loader if val_loader.dataset is not None else test_loader)
         logging.info({ 'epoch': e, **val_metrics }, extra=dict(metrics=True, prefix='sgd/val'))
