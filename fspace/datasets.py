@@ -14,6 +14,27 @@ from .utils.data import get_data_dir, train_test_split, LabelNoiseDataset
 chw2hwc_fn = lambda img: img.permute(1, 2, 0)
 
 
+def get_mnist(root=None, seed=42, val_size=1/6, **_):
+    _MNIST_TRANSFORM = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.1307,), (0.3081,)),
+        transforms.Lambda(chw2hwc_fn)
+    ])
+
+    train_data = create_dataset('torch/mnist', root=root, split='train',
+                                transform=_MNIST_TRANSFORM, download=True)
+
+    if val_size > 0.:
+        train_data, val_data = train_test_split(train_data, test_size=val_size, seed=seed)
+    else:
+        val_data = None
+
+    test_data = create_dataset('torch/mnist', root=root, split='test',
+                               transform=_MNIST_TRANSFORM, download=True)
+
+    return train_data, val_data, test_data
+
+
 def get_fmnist(root=None, seed=42, val_size=1/6, **_):
     _FMNIST_TRANSFORM = transforms.Compose([
         transforms.ToTensor(),
@@ -104,6 +125,10 @@ def get_svhn(root=None, seed=42, val_size=0., **_):
 
 
 _DATASET_CFG = {
+    'mnist': {
+        'num_classes': 10,
+        'get_fn': get_mnist,
+    },
     'svhn': {
         'n_classes': 10,
         'get_fn': get_svhn,
