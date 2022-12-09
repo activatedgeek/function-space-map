@@ -38,30 +38,28 @@ def train_model(state, loader, step_fn, log_dir=None, epoch=None):
 
 def eval_model(state, loader, step_fn):
     N = len(loader.dataset)
-    N_acc = 0
+
     nll = 0.
-    all_logits = []
+    all_p = []
     all_Y = []
 
     for X, Y in tqdm(loader, leave=False):
         X, Y = X.numpy(), Y.numpy()
 
         _logits, _nll = step_fn(state, X, Y)
-        pred_Y = jnp.argmax(_logits, axis=-1)
         
-        N_acc += jnp.sum(pred_Y == Y)
         nll += _nll
 
-        all_logits.append(_logits)
+        all_p.append(jax.nn.softmax(_logits, axis=-1))
         all_Y.append(Y)
     
-    all_logits = jnp.concatenate(all_logits)
+    all_p = jnp.concatenate(all_p)
     all_Y = jnp.concatenate(all_Y)
-    all_p = jax.nn.softmax(all_logits, axis=-1)
     
-    all_ent = stats.multinomial(1, all_p).entropy()
-    avg_ent = jnp.nanmean(all_ent, axis=0)
-    std_ent = jnp.nanstd(all_ent, axis=0)
+    N_acc = jnp.sum(jnp.argmax(all_p, axis=-1) == all_Y)
+    all_ent = - jnp.sum(all_p * jnp.log(all_p + 1e-6), axis=-1)
+    avg_ent = jnp.mean(all_ent, axis=0)
+    std_ent = jnp.std(all_ent, axis=0)
     ece, _ = calibration(jax.nn.one_hot(all_Y, loader.dataset.n_classes), all_p, num_bins=10)
 
     return {

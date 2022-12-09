@@ -1,5 +1,4 @@
 import logging
-from tqdm.auto import tqdm
 from torch.utils.data import DataLoader
 import jax
 import jax.numpy as jnp
@@ -25,7 +24,7 @@ def eval_step_fn(state, b_X, b_Y):
 
 def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
-         dataset=None, train_subset=1., label_noise=0.,
+         dataset=None,
          batch_size=128, num_workers=4):
     wandb.config.update({
         'log_dir': log_dir,
@@ -33,15 +32,12 @@ def main(seed=42, log_dir=None, data_dir=None,
         'model_name': model_name,
         'ckpt_path': ckpt_path,
         'dataset': dataset,
-        'train_subset': train_subset,
-        'label_noise': label_noise,
         'batch_size': batch_size,
     })
 
     # rng = jax.random.PRNGKey(seed)
 
-    train_data, val_data, test_data = get_dataset(
-        dataset, root=data_dir, seed=seed, train_subset=train_subset, label_noise=label_noise)
+    train_data, val_data, test_data = get_dataset(dataset, root=data_dir, seed=seed)
     train_loader = DataLoader(train_data, batch_size=batch_size, num_workers=num_workers,
                               shuffle=True)
     val_loader = DataLoader(val_data, batch_size=batch_size, num_workers=num_workers)
@@ -60,7 +56,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         apply_fn=model.apply,
         params=params,
         **other_vars,
-        tx=optax.adamw(learning_rate=0.))
+        tx=optax.sgd(learning_rate=0.))
 
     eval_fn = lambda *args: eval_model(*args, eval_step_fn)
 
