@@ -1,4 +1,5 @@
 from functools import partial
+from pathlib import Path
 import logging
 import numpy as np
 import torch
@@ -71,7 +72,42 @@ def get_cifar10(root=None, seed=42, val_size=0., v1=False, corrupted=False, batc
     return train_data, val_data, test_data
 
 
+def get_svhn(root=None, seed=42, val_size=0., **_):
+    '''Dataset SVHN
+
+    root (str): Root directory where 'svhn' folder exists or will be downloaded to.
+    '''
+
+    from torchvision.datasets import SVHN
+
+    _SVHN_TRANSFORM = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((.5, .5, .5),
+                             (.25, .25, .25)),
+        transforms.Lambda(chw2hwc_fn)
+    ])
+
+    (Path(root) / 'svhn').mkdir(parents=True, exist_ok=True)
+
+    train_data = SVHN(root=Path(root) / 'svhn', split='train',
+                      transform=_SVHN_TRANSFORM, download=True)
+
+    if val_size > 0.:
+        train_data, val_data = train_test_split(train_data, test_size=val_size, seed=seed)
+    else:
+        val_data = None
+
+    test_data = SVHN(root=Path(root) / 'svhn', split='test',
+                     transform=_SVHN_TRANSFORM, download=True)
+
+    return train_data, val_data, test_data
+
+
 _DATASET_CFG = {
+    'svhn': {
+        'n_classes': 10,
+        'get_fn': get_svhn,
+    },
     'fmnist': {
         'n_classes': 10,
         'get_fn': get_fmnist,
