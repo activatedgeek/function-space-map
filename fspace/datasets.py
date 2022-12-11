@@ -14,10 +14,10 @@ from .utils.data import get_data_dir, train_test_split, LabelNoiseDataset
 chw2hwc_fn = lambda img: img.permute(1, 2, 0)
 
 
-def get_mnist(root=None, seed=42, val_size=1/6, **_):
+def get_mnist(root=None, seed=42, val_size=1/6, normalize=None, **_):
     _MNIST_TRANSFORM = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,)),
+        transforms.Normalize(*normalize),
         transforms.Lambda(chw2hwc_fn)
     ])
 
@@ -35,10 +35,10 @@ def get_mnist(root=None, seed=42, val_size=1/6, **_):
     return train_data, val_data, test_data
 
 
-def get_fmnist(root=None, seed=42, val_size=1/6, **_):
+def get_fmnist(root=None, seed=42, val_size=1/6, normalize=None, **_):
     _FMNIST_TRANSFORM = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.2861,), (0.3530,)),
+        transforms.Normalize(*normalize),
         transforms.Lambda(chw2hwc_fn)
     ])
 
@@ -56,17 +56,18 @@ def get_fmnist(root=None, seed=42, val_size=1/6, **_):
     return train_data, val_data, test_data
 
 
-def get_cifar10(root=None, seed=42, val_size=0., v1=False, corrupted=False, batch_size=128, **_):
+def get_cifar10(root=None, seed=42, val_size=0., normalize=None,
+                v1=False, corrupted=False, batch_size=128, **_):
     _CIFAR10_TRAIN_TRANSFORM = transforms.Compose([
         transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
-        transforms.Normalize((.4914, .4822, .4465), (.247, .243, .261)),
+        transforms.Normalize(*normalize),
         transforms.Lambda(chw2hwc_fn)
     ])
     _CIFAR10_TEST_TRANSFORM = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((.4914, .4822, .4465), (.247, .243, .261)),
+        transforms.Normalize(*normalize),
         transforms.Lambda(chw2hwc_fn)
     ])
 
@@ -93,7 +94,7 @@ def get_cifar10(root=None, seed=42, val_size=0., v1=False, corrupted=False, batc
     return train_data, val_data, test_data
 
 
-def get_svhn(root=None, seed=42, val_size=0., **_):
+def get_svhn(root=None, seed=42, val_size=0., normalize=None, **_):
     '''Dataset SVHN
 
     root (str): Root directory where 'svhn' folder exists or will be downloaded to.
@@ -103,8 +104,7 @@ def get_svhn(root=None, seed=42, val_size=0., **_):
 
     _SVHN_TRANSFORM = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((.5, .5, .5),
-                             (.25, .25, .25)),
+        transforms.Normalize(*normalize),
         transforms.Lambda(chw2hwc_fn)
     ])
 
@@ -128,30 +128,42 @@ _DATASET_CFG = {
     'mnist': {
         'num_classes': 10,
         'get_fn': get_mnist,
+        'normalize': [(0.1307,), (0.3081,)],
     },
     'svhn': {
         'n_classes': 10,
         'get_fn': get_svhn,
+        'normalize': [(.5, .5, .5), (.25, .25, .25)],
     },
     'fmnist': {
         'n_classes': 10,
         'get_fn': get_fmnist,
+        'normalize': [(0.2861,), (0.3530,)],
     },
     'cifar10': {
         'n_classes': 10,
         'get_fn': get_cifar10,
+        'normalize': [(.4914, .4822, .4465), (.247, .243, .261)],
     },
     'cifar10_1': {
         'n_classes': 10,
         'get_fn': partial(get_cifar10, v1=True),
         'ctx_idx': -1,
+        'normalize': [(.4914, .4822, .4465), (.247, .243, .261)],
     },
     'cifar10c': {
         'n_classes': 10,
         'get_fn': partial(get_cifar10, corrupted=True),
         'ctx_idx': -1,
+        'normalize': [(.4914, .4822, .4465), (.247, .243, .261)],
     },
 }
+
+
+def get_dataset_normalization(dataset):
+    assert dataset in _DATASET_CFG, f'Dataset "{dataset}" not supported'
+
+    return _DATASET_CFG[dataset].get('normalize')
 
 
 def get_dataset(dataset, root=None, seed=42, train_subset=1, label_noise=0, is_ctx=False, **kwargs):
@@ -159,7 +171,8 @@ def get_dataset(dataset, root=None, seed=42, train_subset=1, label_noise=0, is_c
 
     root = get_data_dir(data_dir=root)
 
-    raw_data = _DATASET_CFG[dataset].get('get_fn')(root=root, seed=seed, **kwargs)
+    all_kwargs = { **_DATASET_CFG[dataset], **kwargs }
+    raw_data = _DATASET_CFG[dataset].get('get_fn')(root=root, seed=seed, **all_kwargs)
 
     ## 
     # If dataset used for context points, 

@@ -6,23 +6,12 @@ import jax.numpy as jnp
 from flax.training import checkpoints
 from flax.core.frozen_dict import freeze
 import optax
-from scipy import stats
 from sklearn.metrics import roc_auc_score
 
 from fspace.utils.logging import set_logging, finish_logging, wandb
-from fspace.datasets import get_dataset
+from fspace.datasets import get_dataset, get_dataset_normalization
 from fspace.nn import create_model
 from fspace.utils.training import TrainState
-
-
-@jax.jit
-def eval_step_fn(state, b_X, b_Y):
-    logits = state.apply_fn({ 'params': state.params, **state.extra_vars}, b_X,
-                            mutable=False, train=False)
-
-    nll = jnp.sum(optax.softmax_cross_entropy_with_integer_labels(logits, b_Y))
-
-    return logits, nll
 
 
 def main(seed=42, log_dir=None, data_dir=None,
@@ -44,7 +33,8 @@ def main(seed=42, log_dir=None, data_dir=None,
     _, _, test_data = get_dataset(dataset, root=data_dir, seed=seed)
     test_loader = DataLoader(test_data, batch_size=batch_size, num_workers=num_workers)
 
-    _, _, ood_test_data = get_dataset(ood_dataset, root=data_dir, seed=seed)
+    _, _, ood_test_data = get_dataset(ood_dataset, root=data_dir, seed=seed,
+                                      normalize=get_dataset_normalization(dataset))
     ood_test_loader = DataLoader(ood_test_data, batch_size=batch_size, num_workers=num_workers)
 
     model = create_model(model_name, num_classes=test_data.n_classes)
