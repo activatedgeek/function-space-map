@@ -5,8 +5,7 @@ import flax
 from flax.training import train_state
 import jax
 
-from  .third_party.calibration import calibration
-from .metrics import accuracy, categorical_nll, categorical_entropy
+from .metrics import accuracy, categorical_nll
 
 
 ## Override for extra state variables.
@@ -53,25 +52,13 @@ def eval_classifier(state, loader):
     
     all_logits = jnp.concatenate(all_logits)
     all_Y = jnp.concatenate(all_Y)
-    
+
     acc = accuracy(all_logits, all_Y)
     
     all_nll = categorical_nll(all_logits, all_Y)
     avg_nll = jnp.mean(all_nll, axis=0)
 
-    all_p = jax.nn.softmax(all_logits, axis=-1)
-
-    all_ent = categorical_entropy(all_p)
-    avg_ent = jnp.mean(all_ent, axis=0)
-    std_ent = jnp.std(all_ent, axis=0)
-
-    ## TODO: JIT this?
-    ece, _ = calibration(jax.nn.one_hot(all_Y, loader.dataset.n_classes), all_p, num_bins=10)
-
     return {
         'acc': acc,
         'avg_nll': avg_nll,
-        'avg_ent': avg_ent,
-        'std_ent': std_ent,
-        'ece': ece,
     }

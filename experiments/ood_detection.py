@@ -28,7 +28,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         'batch_size': batch_size,
     })
 
-    # rng = jax.random.PRNGKey(seed)
+    rng = jax.random.PRNGKey(seed)
 
     _, _, test_data = get_dataset(dataset, root=data_dir, seed=seed)
     test_loader = DataLoader(test_data, batch_size=batch_size, num_workers=num_workers)
@@ -39,10 +39,13 @@ def main(seed=42, log_dir=None, data_dir=None,
 
     model = create_model(model_name, num_classes=test_data.n_classes)
 
-    # rng, model_init_rng = jax.random.split(rng)
-    # init_vars = model.init(model_init_rng, train_data[0][0].numpy()[None, ...])
-    init_vars = freeze(checkpoints.restore_checkpoint(ckpt_dir=ckpt_path, target=None))
-    logging.info(f'Loaded checkpoint from "{ckpt_path}".')
+    if ckpt_path is not None:
+        init_vars = freeze(checkpoints.restore_checkpoint(ckpt_dir=ckpt_path, target=None))
+        logging.info(f'Loaded checkpoint from "{ckpt_path}".')
+    else:
+        rng, model_init_rng = jax.random.split(rng)
+        init_vars = model.init(model_init_rng, test_data[0][0].numpy()[None, ...])
+        logging.warning(f'Initialized a random model.')
 
     other_vars, params = init_vars.pop('params')
 
