@@ -86,7 +86,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     ood_p_ent = eval_classifier_entropy(state, ood_test_loader)
 
     all_ent = jnp.concatenate([p_ent, ood_p_ent])
-    all_targets = jnp.concatenate([jnp.ones(p_ent.shape[0]), jnp.zeros(ood_p_ent.shape[0])])
+    all_targets = jnp.concatenate([jnp.zeros(ood_p_ent.shape[0]), jnp.ones(p_ent.shape[0])])
 
     auroc = roc_auc_score(all_targets, all_ent)
 
