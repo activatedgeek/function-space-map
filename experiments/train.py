@@ -10,7 +10,7 @@ import optax
 from fspace.utils.logging import set_logging, finish_logging, wandb
 from fspace.datasets import get_dataset
 from fspace.nn import create_model
-from fspace.utils.training import TrainState, train_model, eval_model
+from fspace.utils.training import TrainState, train_model, eval_classifier
 
 
 @jax.jit
@@ -29,16 +29,6 @@ def train_step_fn(state, b_X, b_Y):
     final_state = state.apply_gradients(grads=grads, **new_state)
 
     return final_state, loss
-
-
-@jax.jit
-def eval_step_fn(state, b_X, b_Y):
-    logits = state.apply_fn({ 'params': state.params, **state.extra_vars}, b_X,
-                            mutable=False, train=False)
-
-    nll = jnp.sum(optax.softmax_cross_entropy_with_integer_labels(logits, b_Y))
-
-    return logits, nll
 
 
 def main(seed=42, log_dir=None, data_dir=None,
@@ -97,22 +87,21 @@ def main(seed=42, log_dir=None, data_dir=None,
         tx=optimizer)
 
     train_fn = lambda *args, **kwargs: train_model(*args, train_step_fn, **kwargs)
-    eval_fn = lambda *args: eval_model(*args, eval_step_fn)
 
     best_acc_so_far = 0.
     for e in tqdm(range(epochs)):
         train_state = train_fn(train_state, train_loader, log_dir=log_dir, epoch=e)
         
-        val_metrics = eval_fn(train_state, val_loader if val_loader.dataset is not None else test_loader)
+        val_metrics = eval_classifier(train_state, val_loader if val_loader.dataset is not None else test_loader)
         logging.info({ 'epoch': e, **val_metrics }, extra=dict(metrics=True, prefix='sgd/val'))
 
         if val_metrics['acc'] > best_acc_so_far:
             best_acc_so_far = val_metrics['acc']
 
-            train_metrics = eval_fn(train_state, train_loader)
+            train_metrics = eval_classifier(train_state, train_loader)
             logging.info({ 'epoch': e, **train_metrics }, extra=dict(metrics=True, prefix='sgd/train'))
 
-            test_metrics = eval_fn(train_state, test_loader)
+            test_metrics = eval_classifier(train_state, test_loader)
             logging.info({ 'epoch': e, **test_metrics }, extra=dict(metrics=True, prefix='sgd/test'))
 
             wandb.run.summary['val/best_epoch'] = e

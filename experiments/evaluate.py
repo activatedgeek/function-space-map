@@ -1,7 +1,5 @@
 import logging
 from torch.utils.data import DataLoader
-import jax
-import jax.numpy as jnp
 from flax.training import checkpoints
 from flax.core.frozen_dict import freeze
 import optax
@@ -9,17 +7,7 @@ import optax
 from fspace.utils.logging import set_logging, finish_logging, wandb
 from fspace.datasets import get_dataset
 from fspace.nn import create_model
-from fspace.utils.training import TrainState, eval_model
-
-
-@jax.jit
-def eval_step_fn(state, b_X, b_Y):
-    logits = state.apply_fn({ 'params': state.params, **state.extra_vars}, b_X,
-                            mutable=False, train=False)
-
-    nll = jnp.sum(optax.softmax_cross_entropy_with_integer_labels(logits, b_Y))
-
-    return logits, nll
+from fspace.utils.training import TrainState, eval_classifier
 
 
 def main(seed=42, log_dir=None, data_dir=None,
@@ -58,15 +46,13 @@ def main(seed=42, log_dir=None, data_dir=None,
         **other_vars,
         tx=optax.sgd(learning_rate=0.))
 
-    eval_fn = lambda *args: eval_model(*args, eval_step_fn)
-
-    train_metrics = eval_fn(train_state, train_loader)
+    train_metrics = eval_classifier(train_state, train_loader)
     logging.info(train_metrics, extra=dict(metrics=True, prefix='train'))
 
-    val_metrics = eval_fn(train_state, val_loader if val_loader.dataset is not None else test_loader)
+    val_metrics = eval_classifier(train_state, val_loader if val_loader.dataset is not None else test_loader)
     logging.info(val_metrics, extra=dict(metrics=True, prefix='val'))
 
-    test_metrics = eval_fn(train_state, test_loader)
+    test_metrics = eval_classifier(train_state, test_loader)
     logging.info(test_metrics, extra=dict(metrics=True, prefix='test'))
 
 

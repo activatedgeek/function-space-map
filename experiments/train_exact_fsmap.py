@@ -5,12 +5,11 @@ import jax
 import jax.numpy as jnp
 from flax.training import checkpoints
 import optax
-from functools import partial
 
 from fspace.utils.logging import set_logging, finish_logging, wandb
 from fspace.datasets import get_dataset
 from fspace.nn import create_model
-from fspace.utils.training import TrainState, eval_model
+from fspace.utils.training import TrainState, eval_classifier
 
 def jacobian_sigular_values(jac_fn, p, x, **extra_vars):
     j = jac_fn(p, x, **extra_vars)
@@ -77,16 +76,6 @@ def train_model(state, loader, step_fn, log_dir=None, epoch=None):
     return state
 
 
-@jax.jit
-def eval_step_fn(state, b_X, b_Y):
-    logits = state.apply_fn({ 'params': state.params, **state.extra_vars}, b_X,
-                            mutable=False, train=False)
-
-    nll = jnp.sum(optax.softmax_cross_entropy_with_integer_labels(logits, b_Y))
-
-    return logits, nll
-
-
 def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
          dataset=None, train_subset=1., label_noise=0.,
@@ -149,22 +138,21 @@ def main(seed=42, log_dir=None, data_dir=None,
     jac_fn = jax.jacrev(lambda p, x, **extra_vars: model.apply({'params': p, **extra_vars}, x, train=False).reshape(-1))
     step_fn = jax.jit(lambda *args: train_step_fn(*args, log_det_fn=lambda p, x, **extra: log_det_H(jac_fn, p, x, jitter, **extra), n_train=len(train_data)))
     train_fn = lambda *args, **kwargs: train_model(*args, step_fn, **kwargs)
-    eval_fn = lambda *args: eval_model(*args, eval_step_fn)
 
     best_acc_so_far = 0.
     for e in tqdm(range(epochs)):
         train_state = train_fn(train_state, train_loader, log_dir=log_dir, epoch=e)
         
-        val_metrics = eval_fn(train_state, val_loader if val_loader.dataset is not None else test_loader)
+        val_metrics = eval_classifier(train_state, val_loader if val_loader.dataset is not None else test_loader)
         logging.info({ 'epoch': e, **val_metrics }, extra=dict(metrics=True, prefix='sgd/val'))
 
         if val_metrics['acc'] > best_acc_so_far:
             best_acc_so_far = val_metrics['acc']
 
-            train_metrics = eval_fn(train_state, train_loader)
+            train_metrics = eval_classifier(train_state, train_loader)
             logging.info({ 'epoch': e, **train_metrics }, extra=dict(metrics=True, prefix='sgd/train'))
 
-            test_metrics = eval_fn(train_state, test_loader)
+            test_metrics = eval_classifier(train_state, test_loader)
             logging.info({ 'epoch': e, **test_metrics }, extra=dict(metrics=True, prefix='sgd/test'))
 
             wandb.run.summary['val/best_epoch'] = e
