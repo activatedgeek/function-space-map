@@ -131,14 +131,20 @@ def get_eyepacs(root=None, batch_size=128, **_):
     
     `root` assumes an "EyePACS" folder containing the manual download as instructed above.
     '''
-
+    _EYEPACS_TRANSFORM = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Lambda(chw2hwc_fn)
+    ])
+    
     root = Path(root) / 'EyePACS'
 
     train_data = create_dataset('tfds/diabetic_retinopathy_detection', root=root, split='train',
-                                is_training=True, batch_size=batch_size, download=True)
+                                is_training=True, batch_size=batch_size, 
+                                transform=_EYEPACS_TRANSFORM, download=True)
 
     test_data = create_dataset('tfds/diabetic_retinopathy_detection', root=root, split='test',
-                                is_training=True, batch_size=batch_size, download=True)
+                                is_training=True, batch_size=batch_size,
+                                transform=_EYEPACS_TRANSFORM, download=True)
 
     return train_data, None, test_data
 
@@ -177,7 +183,7 @@ _DATASET_CFG = {
         'normalize': [(.4914, .4822, .4465), (.247, .243, .261)],
     },
     'eyepacs': {
-        'n_classes': 2,
+        'n_classes': 5,
         'get_fn': get_eyepacs,
     },
 }
