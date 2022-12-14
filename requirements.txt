@@ -10,6 +10,7 @@ scipy
 pandas
 scikit-learn
 tensorflow<2.12
+tensorflow-datasets
 torch<1.13
 torchvision
 timm

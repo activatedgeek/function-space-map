@@ -124,6 +124,25 @@ def get_svhn(root=None, seed=42, val_size=0., normalize=None, **_):
     return train_data, val_data, test_data
 
 
+def get_eyepacs(root=None, batch_size=128, **_):
+    '''
+
+    See https://github.com/google/uncertainty-baselines/tree/main/baselines/diabetic_retinopathy_detection#data-installation.
+    
+    `root` assumes an "EyePACS" folder containing the manual download as instructed above.
+    '''
+
+    root = Path(root) / 'EyePACS'
+
+    train_data = create_dataset('tfds/diabetic_retinopathy_detection', root=root, split='train',
+                                is_training=True, batch_size=batch_size, download=True)
+
+    test_data = create_dataset('tfds/diabetic_retinopathy_detection', root=root, split='test',
+                                is_training=True, batch_size=batch_size, download=True)
+
+    return train_data, None, test_data
+
+
 _DATASET_CFG = {
     'mnist': {
         'num_classes': 10,
@@ -156,6 +175,10 @@ _DATASET_CFG = {
         'get_fn': partial(get_cifar10, corrupted=True),
         'ctx_idx': -1,
         'normalize': [(.4914, .4822, .4465), (.247, .243, .261)],
+    },
+    'eyepacs': {
+        'n_classes': 2,
+        'get_fn': get_eyepacs,
     },
 }
 
