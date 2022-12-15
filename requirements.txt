@@ -11,11 +11,11 @@ pandas
 scikit-learn
 tensorflow<2.12
 tensorflow-datasets
-torch<1.13
+torch<1.14
 torchvision
 timm
 jax[cuda11_cudnn82]<0.4
-flax<0.6
+flax<0.7
 optax<0.2
 distrax<0.2
 blackjax<1.0
