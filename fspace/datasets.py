@@ -56,6 +56,28 @@ def get_fmnist(root=None, seed=42, val_size=1/6, normalize=None, **_):
     return train_data, val_data, test_data
 
 
+def get_kmnist(root=None, seed=42, val_size=1/6, normalize=None, **_):
+    _FMNIST_TRANSFORM = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(*normalize),
+        transforms.Lambda(chw2hwc_fn)
+    ])
+
+    train_data = create_dataset('torch/kmnist', root=root, split='train',
+                                transform=_FMNIST_TRANSFORM, download=True)
+
+    if val_size > 0.:
+        train_data, val_data = train_test_split(train_data, test_size=val_size, seed=seed)
+    else:
+        val_data = None
+
+    test_data = create_dataset('torch/kmnist', root=root, split='test',
+                               transform=_FMNIST_TRANSFORM, download=True)
+
+    return train_data, val_data, test_data
+
+
+
 def get_cifar10(root=None, seed=42, val_size=0., normalize=None,
                 v1=False, corrupted=False, batch_size=128, **_):
     _CIFAR10_TRAIN_TRANSFORM = transforms.Compose([
@@ -164,6 +186,11 @@ _DATASET_CFG = {
         'n_classes': 10,
         'get_fn': get_fmnist,
         'normalize': [(0.2861,), (0.3530,)],
+    },
+    'kmnist': {
+        'n_classes': 10,
+        'get_fn': get_kmnist,
+        'normalize': [(0.5,), (0.5,)],
     },
     'cifar10': {
         'n_classes': 10,

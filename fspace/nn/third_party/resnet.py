@@ -17,12 +17,14 @@ class ResNetBlock(nn.Module):
                     strides=(1, 1) if not self.subsample else (2, 2),
                     kernel_init=resnet_kernel_init,
                     use_bias=False)(x)
-        z = nn.BatchNorm()(z, use_running_average=not train)
+        # z = nn.BatchNorm()(z, use_running_average=not train)
+        z = nn.LayerNorm()(z)
         z = self.act_fn(z)
         z = nn.Conv(self.c_out, kernel_size=(3, 3),
                     kernel_init=resnet_kernel_init,
                     use_bias=False)(z)
-        z = nn.BatchNorm()(z, use_running_average=not train)
+        # z = nn.BatchNorm()(z, use_running_average=not train)
+        z = nn.LayerNorm()(z)
 
         if self.subsample:
             x = nn.Conv(self.c_out, kernel_size=(1, 1), strides=(2, 2), kernel_init=resnet_kernel_init)(x)
@@ -44,7 +46,8 @@ class ResNet(nn.Module):
         x = nn.Conv(self.c_hidden[0], (3, 3), (1, 1), padding=[(1, 1), (1, 1)], kernel_init=resnet_kernel_init, use_bias=False)(x)
         # x = nn.Conv(self.c_hidden[0], kernel_size=(3, 3), kernel_init=resnet_kernel_init, use_bias=False)(x)  # original
         if self.block_class == ResNetBlock:  # If pre-activation block, we do not apply non-linearities yet
-            x = nn.BatchNorm()(x, use_running_average=not train)
+            # x = nn.BatchNorm()(x, use_running_average=not train)
+            x = nn.LayerNorm()(x)
             x = self.act_fn(x)
 
         # Creating the ResNet blocks
