@@ -81,7 +81,7 @@ def train_model(rng, state, loader, step_fn, ctx_loader=None, log_dir=None, epoc
 
         if log_dir is not None and i % 100 == 0:
             metrics = { 'epoch': epoch, 'mini_loss': loss.item() }
-            logging.info(metrics, extra=dict(metrics=True, prefix='sgd/train'))
+            logging.info(metrics, extra=dict(metrics=True, prefix='train'))
             logging.debug(f'Epoch {epoch}: {loss.item():.4f}')
 
     return state
@@ -160,16 +160,16 @@ def main(seed=42, log_dir=None, data_dir=None,
         train_state = train_fn(train_state, epoch=e)
         
         val_metrics = eval_classifier(train_state, val_loader if val_loader.dataset is not None else test_loader)
-        logging.info({ 'epoch': e, **val_metrics }, extra=dict(metrics=True, prefix='sgd/val'))
+        logging.info({ 'epoch': e, **val_metrics }, extra=dict(metrics=True, prefix='val'))
 
         if val_metrics['acc'] > best_acc_so_far:
             best_acc_so_far = val_metrics['acc']
 
             train_metrics = eval_classifier(train_state, train_loader)
-            logging.info({ 'epoch': e, **train_metrics }, extra=dict(metrics=True, prefix='sgd/train'))
+            logging.info({ 'epoch': e, **train_metrics }, extra=dict(metrics=True, prefix='train'))
 
             test_metrics = eval_classifier(train_state, test_loader)
-            logging.info({ 'epoch': e, **test_metrics }, extra=dict(metrics=True, prefix='sgd/test'))
+            logging.info({ 'epoch': e, **test_metrics }, extra=dict(metrics=True, prefix='test'))
 
             wandb.run.summary['val/best_epoch'] = e
             wandb.run.summary['train/best_acc'] = train_metrics['acc']
