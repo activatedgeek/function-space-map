@@ -25,7 +25,7 @@ def train_step_fn(_, state, b_X, b_Y, b_X_ctx, reg_scale):
 
         loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(b_logits[:B], b_Y))
 
-        reg_loss = jnp.sum(optax.l2_loss(b_logits))
+        reg_loss = jnp.sum(jnp.square(b_logits))
 
         total_loss = loss + reg_scale * reg_loss
 
@@ -65,7 +65,7 @@ def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
          dataset=None, ctx_dataset=None, train_subset=1., label_noise=0.,
          batch_size=128, num_workers=4,
-         optimizer='sgd', lr=.1, momentum=.9, reg_scale=0.,
+         optimizer='sgd', lr=.1, momentum=.9, alpha=0., reg_scale=0.,
          epochs=0):
     wandb.config.update({
         'log_dir': log_dir,
@@ -80,6 +80,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         'optimizer': optimizer,
         'lr': lr,
         'momentum': momentum,
+        'alpha': alpha,
         'reg_scale': reg_scale,
         'epochs': epochs,
     })
@@ -113,10 +114,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     if optimizer == 'adamw':
         optimizer = optax.adamw(learning_rate=lr)
     elif optimizer == 'sgd':
-        optimizer = optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader), 1e-3), momentum=momentum)
-    # elif optimizer == 'lro':
-    #     from learned_optimization.research.general_lopt import prefab
-    #     optimizer = prefab.optax_lopt(epochs * len(train_loader))
+        optimizer = optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader), alpha), momentum=momentum)
     else:
         raise NotImplementedError
 

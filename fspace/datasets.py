@@ -13,6 +13,11 @@ from .utils.data import get_data_dir, train_test_split, LabelNoiseDataset
 ## Convert from CxHxW to HxWxC for Flax.
 chw2hwc_fn = lambda img: img.permute(1, 2, 0)
 
+_CIFAR_AUGMENT_TRANSFORM = [
+    transforms.RandomCrop(32, padding=4),
+    transforms.RandomHorizontalFlip(),
+]
+
 
 def get_mnist(root=None, seed=42, val_size=1/6, normalize=None, **_):
     _MNIST_TRANSFORM = transforms.Compose([
@@ -78,23 +83,18 @@ def get_kmnist(root=None, seed=42, val_size=1/6, normalize=None, **_):
 
 
 
-def get_cifar10(root=None, seed=42, val_size=0., normalize=None,
+def get_cifar10(root=None, seed=42, val_size=0., normalize=None, augment=True,
                 v1=False, corrupted=False, batch_size=128, **_):
-    _CIFAR10_TRAIN_TRANSFORM = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
+    _TEST_TRANSFORM = [
         transforms.ToTensor(),
         transforms.Normalize(*normalize),
         transforms.Lambda(chw2hwc_fn)
-    ])
-    _CIFAR10_TEST_TRANSFORM = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(*normalize),
-        transforms.Lambda(chw2hwc_fn)
-    ])
+    ]
+
+    _TRAIN_TRANSFORM = (_CIFAR_AUGMENT_TRANSFORM if augment else []) + _TEST_TRANSFORM
 
     train_data = create_dataset('torch/cifar10', root=root, split='train',
-                                transform=_CIFAR10_TRAIN_TRANSFORM, download=True)
+                                transform=transforms.Compose(_TRAIN_TRANSFORM), download=True)
 
     if val_size > 0.:
         train_data, val_data = train_test_split(train_data, test_size=val_size, seed=seed)
@@ -104,14 +104,37 @@ def get_cifar10(root=None, seed=42, val_size=0., normalize=None,
     if v1:
         test_data = create_dataset('tfds/cifar10_1', root=root, split='test',
                                     is_training=True, batch_size=batch_size,
-                                    transform=_CIFAR10_TEST_TRANSFORM, download=True)
+                                    transform=transforms.Compose(_TEST_TRANSFORM), download=True)
     elif corrupted:
         test_data = create_dataset('tfds/cifar10_corrupted', root=root, split='test',
                                     is_training=True, batch_size=batch_size,
-                                    transform=_CIFAR10_TEST_TRANSFORM, download=True)
+                                    transform=transforms.Compose(_TEST_TRANSFORM), download=True)
     else:
         test_data = create_dataset('torch/cifar10', root=root, split='test',
-                                    transform=_CIFAR10_TEST_TRANSFORM, download=True)
+                                    transform=transforms.Compose(_TEST_TRANSFORM), download=True)
+
+    return train_data, val_data, test_data
+
+
+def get_cifar100(root=None, seed=42, val_size=0., normalize=None, augment=True, **_):
+    _TEST_TRANSFORM = [
+        transforms.ToTensor(),
+        transforms.Normalize(*normalize),
+        transforms.Lambda(chw2hwc_fn)
+    ]
+
+    _TRAIN_TRANSFORM = (_CIFAR_AUGMENT_TRANSFORM if augment else []) + _TEST_TRANSFORM
+
+    train_data = create_dataset('torch/cifar100', root=root, split='train',
+                                transform=transforms.Compose(_TRAIN_TRANSFORM), download=True)
+
+    if val_size > 0.:
+        train_data, val_data = train_test_split(train_data, test_size=val_size, seed=seed)
+    else:
+        val_data = None
+
+    test_data = create_dataset('torch/cifar100', root=root, split='test',
+                                transform=transforms.Compose(_TEST_TRANSFORM), download=True)
 
     return train_data, val_data, test_data
 
@@ -146,31 +169,6 @@ def get_svhn(root=None, seed=42, val_size=0., normalize=None, **_):
     return train_data, val_data, test_data
 
 
-def get_eyepacs(root=None, batch_size=128, **_):
-    '''
-
-    See https://github.com/google/uncertainty-baselines/tree/main/baselines/diabetic_retinopathy_detection#data-installation.
-    
-    `root` assumes an "EyePACS" folder containing the manual download as instructed above.
-    '''
-    _EYEPACS_TRANSFORM = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Lambda(chw2hwc_fn)
-    ])
-    
-    root = Path(root) / 'EyePACS'
-
-    train_data = create_dataset('tfds/diabetic_retinopathy_detection', root=root, split='train',
-                                is_training=True, batch_size=batch_size, 
-                                transform=_EYEPACS_TRANSFORM, download=True)
-
-    test_data = create_dataset('tfds/diabetic_retinopathy_detection', root=root, split='test',
-                                is_training=True, batch_size=batch_size,
-                                transform=_EYEPACS_TRANSFORM, download=True)
-
-    return train_data, None, test_data
-
-
 _DATASET_CFG = {
     'mnist': {
         'num_classes': 10,
@@ -200,18 +198,17 @@ _DATASET_CFG = {
     'cifar10_1': {
         'n_classes': 10,
         'get_fn': partial(get_cifar10, v1=True),
-        'ctx_idx': -1,
         'normalize': [(.4914, .4822, .4465), (.247, .243, .261)],
     },
     'cifar10c': {
         'n_classes': 10,
         'get_fn': partial(get_cifar10, corrupted=True),
-        'ctx_idx': -1,
         'normalize': [(.4914, .4822, .4465), (.247, .243, .261)],
     },
-    'eyepacs': {
-        'n_classes': 5,
-        'get_fn': get_eyepacs,
+    'cifar100': {
+        'n_classes': 100,
+        'get_fn': get_cifar100,
+        'normalize': [(0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)],
     },
 }
 
@@ -227,7 +224,7 @@ def get_dataset(dataset, root=None, seed=42, train_subset=1, label_noise=0, is_c
 
     root = get_data_dir(data_dir=root)
 
-    all_kwargs = { **_DATASET_CFG[dataset], **kwargs }
+    all_kwargs = { 'augment': not is_ctx, **_DATASET_CFG[dataset], **kwargs }
     raw_data = _DATASET_CFG[dataset].get('get_fn')(root=root, seed=seed, **all_kwargs)
 
     ## 
@@ -259,8 +256,7 @@ def get_dataset(dataset, root=None, seed=42, train_subset=1, label_noise=0, is_c
     setattr(train_data, 'n_classes', n_classes)
     if val_data is not None:
         setattr(val_data, 'n_classes', n_classes)
-    if test_data is not None:
-        setattr(test_data, 'n_classes', n_classes)
+    setattr(test_data, 'n_classes', n_classes)
 
     logging.info(f'Train Dataset Size: {len(train_data)};  Test Dataset Size: {len(test_data)}')
 

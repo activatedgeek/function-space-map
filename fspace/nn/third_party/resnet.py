@@ -2,7 +2,8 @@ from functools import partial
 from flax import linen as nn
 
 
-resnet_kernel_init = nn.initializers.variance_scaling(2.0, mode='fan_out', distribution='normal')
+resnet_kernel_init = nn.initializers.variance_scaling(0.1, mode='fan_in', distribution='uniform')
+# resnet_kernel_init = nn.initializers.he_normal()
 
 
 class ResNetBlock(nn.Module):
