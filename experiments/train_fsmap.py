@@ -9,7 +9,7 @@ import optax
 import timm
 
 from fspace.utils.logging import set_logging, finish_logging, wandb
-from fspace.datasets import get_dataset
+from fspace.datasets import get_dataset, get_dataset_normalization
 from fspace.nn import create_model
 from fspace.utils.training import TrainState, eval_classifier
 
@@ -121,7 +121,8 @@ def main(seed=42, log_dir=None, data_dir=None,
 
     ctx_loader = None
     if ctx_dataset is not None:
-        ctx_data = get_dataset(ctx_dataset, root=data_dir, is_ctx=True, batch_size=batch_size, seed=seed)
+        ctx_data = get_dataset(ctx_dataset, root=data_dir, is_ctx=True, batch_size=batch_size, seed=seed,
+                               normalize=get_dataset_normalization(dataset))
         ctx_loader = DataLoader(ctx_data, batch_size=batch_size, num_workers=num_workers,
                                 shuffle=not isinstance(ctx_data, timm.data.IterableImageDataset))
         logging.debug(f'Using {ctx_dataset} for context samples.')
