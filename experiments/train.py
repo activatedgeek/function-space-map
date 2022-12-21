@@ -20,7 +20,7 @@ def train_step_fn(state, b_X, b_Y):
                                             mutable=['batch_stats'], train=True)
 
         loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logits, b_Y))
-        # loss = loss + weight_decay * sum([jnp.vdot(p, p) for p in jax.tree_util.tree_leaves(params)]) / 2
+        # loss = loss + reg_scale * sum([jnp.vdot(p, p) for p in jax.tree_util.tree_leaves(params)]) / 2
 
         return loss, new_state
 
@@ -35,7 +35,7 @@ def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
          dataset=None, train_subset=1., label_noise=0.,
          batch_size=128, num_workers=4,
-         optimizer='sgd', lr=.1, momentum=.9, weight_decay=0.,
+         optimizer='sgd', lr=.1, momentum=.9, reg_scale=0.,
          epochs=0):
     wandb.config.update({
         'log_dir': log_dir,
@@ -49,7 +49,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         'optimizer': optimizer,
         'lr': lr,
         'momentum': momentum,
-        'weight_decay': weight_decay,
+        'reg_scale': reg_scale,
         'epochs': epochs,
     })
     rng = jax.random.PRNGKey(seed)
@@ -71,10 +71,10 @@ def main(seed=42, log_dir=None, data_dir=None,
     other_vars, params = init_vars.pop('params')
 
     if optimizer == 'adamw':
-        optimizer = optax.adamw(learning_rate=lr, weight_decay=weight_decay)
+        optimizer = optax.adamw(learning_rate=lr, weight_decay=reg_scale)
     elif optimizer == 'sgd':
         optimizer = optax.chain(
-            optax.add_decayed_weights(weight_decay),
+            optax.add_decayed_weights(reg_scale),
             optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader)), momentum=momentum),
         )
     else:

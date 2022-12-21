@@ -23,8 +23,6 @@ def train_step_fn(_, state, b_X, b_Y, b_X_ctx, reg_scale):
         b_logits, new_state = state.apply_fn({ 'params': params, **extra_vars }, b_X_in,
                                              mutable=['batch_stats'], train=True)
 
-        
-
         loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(b_logits[:B], b_Y))
 
         reg_loss = jnp.sum(optax.l2_loss(b_logits))
