@@ -15,40 +15,21 @@ from fspace.utils.training import TrainState, eval_classifier
 
 
 @jax.jit
-def train_step_fn(_, state, b_X, b_Y, b_X_ctx, func_decay):
-    # def sample_delta_fn(rng_tree, logits):
-    #     ## @NOTE: Assumes zero mean param.
-    #     def sample_param(key, param):
-    #         return noise_std * jax.random.normal(key, param.shape, param.dtype)
+def train_step_fn(_, state, b_X, b_Y, b_X_ctx, reg_scale):
+    B = b_X.shape[0]
 
-    #     sample_params = jax.tree_util.tree_map(sample_param, rng_tree, state.params)
-    #     sample_logits = state.apply_fn({ 'params': sample_params, **state.extra_vars}, b_X_ctx,
-    #                                     mutable=False, train=False)
-    #     sample_delta = logits - jax.lax.stop_gradient(sample_logits)
-    #     return sample_delta
+    def loss_fn(params, **extra_vars):        
+        b_X_in = b_X if b_X_ctx is None else jnp.concatenate([b_X, b_X_ctx], axis=0)
+        b_logits, new_state = state.apply_fn({ 'params': params, **extra_vars }, b_X_in,
+                                             mutable=['batch_stats'], train=True)
 
-    def loss_fn(params, **extra_vars):
-        logits, new_state = state.apply_fn({ 'params': params, **extra_vars }, b_X,
-                                            mutable=['batch_stats'], train=True)
+        
 
-        loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logits, b_Y))
+        loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(b_logits[:B], b_Y))
 
-        reg_loss = jnp.sum(optax.l2_loss(logits))
+        reg_loss = jnp.sum(optax.l2_loss(b_logits))
 
-        if b_X_ctx is not None:
-            ctx_logits, _ = state.apply_fn({ 'params': params, **extra_vars }, b_X_ctx,
-                                            mutable=['batch_stats'], train=True)
-            
-            reg_loss += jnp.sum(optax.l2_loss(ctx_logits))
-
-        # if len(rng_trees):
-        #     reg_loss = []
-        #     for rng_tree in rng_trees:
-        #         sample_delta = sample_delta_fn(rng_tree, logits)
-        #         reg_loss.append(jnp.vdot(sample_delta, sample_delta))
-        #     reg_loss = - jax.nn.logsumexp(- func_decay * jnp.array(reg_loss) / 2)
-
-        total_loss = loss + func_decay * reg_loss
+        total_loss = loss + reg_scale * reg_loss
 
         return total_loss, new_state
 
@@ -72,11 +53,6 @@ def train_model(rng, state, loader, step_fn, ctx_loader=None, log_dir=None, epoc
         if X_ctx is not None:
             X_ctx = X_ctx.numpy()
 
-        # rng_trees = []
-        # for _ in range(n_samples):
-        #     rng, _tree = tree_split(rng, state.params)
-        #     rng_trees.append(_tree)
-
         state, loss = step_fn(rng, state, X, Y, X_ctx)
 
         if log_dir is not None and i % 100 == 0:
@@ -91,7 +67,7 @@ def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
          dataset=None, ctx_dataset=None, train_subset=1., label_noise=0.,
          batch_size=128, num_workers=4,
-         optimizer='sgd', lr=.1, momentum=.9, func_decay=0.,
+         optimizer='sgd', lr=.1, momentum=.9, reg_scale=0.,
          epochs=0):
     wandb.config.update({
         'log_dir': log_dir,
@@ -106,7 +82,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         'optimizer': optimizer,
         'lr': lr,
         'momentum': momentum,
-        'func_decay': func_decay,
+        'reg_scale': reg_scale,
         'epochs': epochs,
     })
 
@@ -139,7 +115,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     if optimizer == 'adamw':
         optimizer = optax.adamw(learning_rate=lr)
     elif optimizer == 'sgd':
-        optimizer = optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader)), momentum=momentum)
+        optimizer = optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader), 1e-3), momentum=momentum)
     # elif optimizer == 'lro':
     #     from learned_optimization.research.general_lopt import prefab
     #     optimizer = prefab.optax_lopt(epochs * len(train_loader))
@@ -152,7 +128,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         **other_vars,
         tx=optimizer)
 
-    step_fn = lambda *args: train_step_fn(*args, func_decay)
+    step_fn = lambda *args: train_step_fn(*args, reg_scale)
     train_fn = lambda *args, **kwargs: train_model(rng, *args, train_loader, step_fn, 
                                                    ctx_loader=ctx_loader, log_dir=log_dir, **kwargs)
 
