@@ -1,7 +1,11 @@
 from .cnn import SmallCNN, TinyCNN
-from .third_party.resnet import ResNet18
+from .third_party.resnet import ResNet9, ResNet18
+
 
 __MODEL_CFG = {
+    'resnet9': {
+        'model_cls': ResNet9,
+    },
     'resnet18': {
         'model_cls': ResNet18,
     },
@@ -12,6 +16,7 @@ __MODEL_CFG = {
         'model_cls': TinyCNN,
     }
 }
+
 
 def create_model(model_name, num_classes=10, **kwargs):
     assert model_name in __MODEL_CFG, f'Model "{model_name}" not supported'

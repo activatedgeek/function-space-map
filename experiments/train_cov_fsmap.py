@@ -35,20 +35,18 @@ def train_step_fn(_, state, b_X, b_Y, b_X_ctx, prior_mean, reg_scale, jitter=1e-
     def loss_fn(params, **extra_vars):
         b_X_in = b_X if b_X_ctx is None else jnp.concatenate([b_X, b_X_ctx], axis=0)
 
-        def f(_p):
-            return state.apply_fn({ 'params': _p, **extra_vars }, b_X_in,
-                                  mutable=['batch_stats'], train=True)
-
-        b_logits, new_state = f(params)
+        b_logits, new_state = state.apply_fn({ 'params': params, **extra_vars }, b_X_in,
+                                             mutable=['batch_stats'], train=True)
 
         loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(b_logits[:B], b_Y))
 
-        f_mean, _ = f(prior_mean)
-        f_jac, _ = jax.jacfwd(f, has_aux=True)(prior_mean)
+        ## TODO: OOMs for large inputs.
+        f = lambda _p: state.apply_fn({ 'params': _p, **extra_vars }, b_X_in, mutable=['batch_stats'], train=True)[0]
+        f_mean = f(prior_mean)
+        f_jac = jax.jacfwd(f)(prior_mean)
         f_cov = jnp.sum(jnp.stack(
             jax.tree_util.tree_flatten(jax.tree_util.tree_map(f_cov_fn, f_jac))[0]), axis=0)
 
-        ## FIXME: OOM!
         reg_loss = - jnp.sum(jax.vmap(f_prior_fn)(
             f_mean.T, jnp.stack([f_cov[:, c, :, c] for c in range(b_logits.shape[-1])]), b_logits.T))
 

@@ -64,5 +64,8 @@ class ResNet(nn.Module):
         return x
 
 
+ResNet9 = partial(ResNet, act_fn=nn.relu, block_class=ResNetBlock,
+                  num_blocks=(3, 3, 3), c_hidden=(16, 32, 64))
+
 ResNet18 = partial(ResNet, act_fn=nn.relu, block_class=ResNetBlock,
                    num_blocks=(2, 2, 2, 2), c_hidden=(64, 128, 256, 512))
