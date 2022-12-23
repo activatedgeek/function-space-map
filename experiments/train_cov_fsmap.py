@@ -16,7 +16,7 @@ from fspace.utils.training import TrainState, eval_classifier
 
 
 @jax.jit
-def train_step_fn(_, state, b_X, b_Y, b_X_ctx, reg_scale, jitter=1e-4):
+def train_step_fn(_, state, b_X, b_Y, b_X_ctx, prior_mean, reg_scale, jitter=1e-4):
     B = b_X.shape[0]
 
     ## FIXME: add parameter prior co-variance.
@@ -43,11 +43,10 @@ def train_step_fn(_, state, b_X, b_Y, b_X_ctx, reg_scale, jitter=1e-4):
 
         loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(b_logits[:B], b_Y))
 
-        ## FIXME: use prior mean params.
-        f_mean, _ = f(params)
-        f_jac, _ = jax.jacfwd(f, has_aux=True)(params)
+        f_mean, _ = f(prior_mean)
+        f_jac, _ = jax.jacfwd(f, has_aux=True)(prior_mean)
         f_cov = jnp.sum(jnp.stack(
-            jax.tree_util.tree_flatten(jax.tree_map(f_cov_fn, f_jac))[0]), axis=0)
+            jax.tree_util.tree_flatten(jax.tree_util.tree_map(f_cov_fn, f_jac))[0]), axis=0)
 
         ## FIXME: OOM!
         reg_loss = - jnp.sum(jax.vmap(f_prior_fn)(
@@ -150,7 +149,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         **other_vars,
         tx=optimizer)
 
-    step_fn = lambda *args: train_step_fn(*args, reg_scale)
+    step_fn = lambda *args: train_step_fn(*args, init_params, reg_scale)
     train_fn = lambda *args, **kwargs: train_model(rng, *args, train_loader, step_fn,
                                                    ctx_loader=ctx_loader, log_dir=log_dir, **kwargs)
 
