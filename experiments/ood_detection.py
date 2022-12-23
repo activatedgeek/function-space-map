@@ -29,7 +29,7 @@ def eval_classifier_entropy(state, loader):
 
         all_logits.append(_forward(X))
         all_Y.append(Y)
-    
+
     all_logits = jnp.concatenate(all_logits)
     all_Y = jnp.concatenate(all_Y)
 

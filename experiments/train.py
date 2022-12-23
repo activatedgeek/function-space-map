@@ -91,7 +91,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     best_acc_so_far = 0.
     for e in tqdm(range(epochs)):
         train_state = train_fn(train_state, train_loader, log_dir=log_dir, epoch=e)
-        
+
         val_metrics = eval_classifier(train_state, val_loader if val_loader.dataset is not None else test_loader)
         logging.info({ 'epoch': e, **val_metrics }, extra=dict(metrics=True, prefix='val'))
 

@@ -29,7 +29,7 @@ def eval_classifier(state, loader):
 
         all_logits.append(_forward(X))
         all_Y.append(Y)
-    
+
     all_logits = jnp.concatenate(all_logits)
     all_Y = jnp.concatenate(all_Y)
 
@@ -37,7 +37,7 @@ def eval_classifier(state, loader):
 
     acc = accuracy(all_logits, all_Y)
     sel_acc = selective_accuracy(all_p, all_Y)
-    
+
     all_nll = categorical_nll(all_logits, all_Y)
     avg_nll = jnp.mean(all_nll, axis=0)
 

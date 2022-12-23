@@ -7,6 +7,7 @@ from flax.training import checkpoints
 from flax.core.frozen_dict import freeze
 import optax
 import timm
+import distrax
 
 from fspace.utils.logging import set_logging, finish_logging, wandb
 from fspace.datasets import get_dataset, get_dataset_normalization
@@ -15,18 +16,42 @@ from fspace.utils.training import TrainState, eval_classifier
 
 
 @jax.jit
-def train_step_fn(_, state, b_X, b_Y, b_X_ctx, reg_scale):
+def train_step_fn(_, state, b_X, b_Y, b_X_ctx, reg_scale, jitter=1e-4):
     B = b_X.shape[0]
+
+    ## FIXME: add parameter prior co-variance.
+    def f_cov_fn(j):
+        B, C, *_ = j.shape
+        j_flat = jnp.reshape(j, (B * C, -1))
+        return jnp.reshape(jnp.matmul(j_flat, j_flat.T),
+                            (B, C, B, C))
+
+    def f_prior_fn(loc, cov, logits):
+        dist = distrax.MultivariateNormalFullCovariance(
+            loc=jax.lax.stop_gradient(loc),
+            covariance_matrix=jax.lax.stop_gradient(cov + jitter * jnp.eye(cov.shape[0])))
+        return dist.log_prob(logits)
 
     def loss_fn(params, **extra_vars):
         b_X_in = b_X if b_X_ctx is None else jnp.concatenate([b_X, b_X_ctx], axis=0)
 
-        b_logits, new_state = state.apply_fn({ 'params': params, **extra_vars }, b_X_in,
-                                             mutable=['batch_stats'], train=True)
+        def f(_p):
+            return state.apply_fn({ 'params': _p, **extra_vars }, b_X_in,
+                                  mutable=['batch_stats'], train=True)
+
+        b_logits, new_state = f(params)
 
         loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(b_logits[:B], b_Y))
 
-        reg_loss = jnp.sum(jnp.square(b_logits))
+        ## FIXME: use prior mean params.
+        f_mean, _ = f(params)
+        f_jac, _ = jax.jacfwd(f, has_aux=True)(params)
+        f_cov = jnp.sum(jnp.stack(
+            jax.tree_util.tree_flatten(jax.tree_map(f_cov_fn, f_jac))[0]), axis=0)
+
+        ## FIXME: OOM!
+        reg_loss = - jnp.sum(jax.vmap(f_prior_fn)(
+            f_mean.T, jnp.stack([f_cov[:, c, :, c] for c in range(b_logits.shape[-1])]), b_logits.T))
 
         total_loss = loss + reg_scale * reg_loss
 
@@ -110,7 +135,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     else:
         rng, model_init_rng = jax.random.split(rng)
         init_vars = model.init(model_init_rng, train_data[0][0].numpy()[None, ...])
-    other_vars, params = init_vars.pop('params')
+    other_vars, init_params = init_vars.pop('params')
 
     if optimizer == 'adamw':
         optimizer = optax.adamw(learning_rate=lr)
@@ -121,7 +146,7 @@ def main(seed=42, log_dir=None, data_dir=None,
 
     train_state = TrainState.create(
         apply_fn=model.apply,
-        params=params,
+        params=init_params,
         **other_vars,
         tx=optimizer)
 
