@@ -16,21 +16,8 @@ from fspace.utils.training import TrainState, eval_classifier
 
 
 @jax.jit
-def train_step_fn(_, state, b_X, b_Y, b_X_ctx, prior_mean, reg_scale, jitter=1e-4):
+def train_step_fn(_, state, b_X, b_Y, b_X_ctx, prior_mean, reg_scale, prior_var=1., jitter=1e-4):
     B = b_X.shape[0]
-
-    ## FIXME: add parameter prior co-variance.
-    def f_cov_fn(j):
-        B, C, *_ = j.shape
-        j_flat = jnp.reshape(j, (B * C, -1))
-        return jnp.reshape(jnp.matmul(j_flat, j_flat.T),
-                            (B, C, B, C))
-
-    def f_prior_fn(loc, cov, logits):
-        dist = distrax.MultivariateNormalFullCovariance(
-            loc=jax.lax.stop_gradient(loc),
-            covariance_matrix=jax.lax.stop_gradient(cov + jitter * jnp.eye(cov.shape[0])))
-        return dist.log_prob(logits)
 
     def loss_fn(params, **extra_vars):
         b_X_in = b_X if b_X_ctx is None else jnp.concatenate([b_X, b_X_ctx], axis=0)
@@ -40,13 +27,23 @@ def train_step_fn(_, state, b_X, b_Y, b_X_ctx, prior_mean, reg_scale, jitter=1e-
 
         loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(b_logits[:B], b_Y))
 
-        ## TODO: OOMs for large inputs.
-        f = lambda _p: state.apply_fn({ 'params': _p, **extra_vars }, b_X_in, mutable=['batch_stats'], train=True)[0]
-        f_mean = f(prior_mean)
-        f_jac = jax.jacfwd(f)(prior_mean)
+        f = lambda _p, _x: state.apply_fn({ 'params': _p, **extra_vars }, _x, mutable=['batch_stats'], train=True)[0]
+        f_mean = f(prior_mean, b_X_in)
+        ## FIXME: OOMs for large inputs.
+        f_jac = jax.vmap(jax.jacrev(f), in_axes=(None, 0))(prior_mean, jnp.expand_dims(b_X_in, axis=1))
+        def f_cov_fn(j):
+            B, _, C, *_ = j.shape
+            j_flat = jnp.reshape(j, (B * C, -1)) * prior_var
+            return jnp.reshape(jnp.matmul(j_flat, j_flat.T),
+                                (B, C, B, C))
         f_cov = jnp.sum(jnp.stack(
             jax.tree_util.tree_flatten(jax.tree_util.tree_map(f_cov_fn, f_jac))[0]), axis=0)
 
+        def f_prior_fn(_loc, _cov, _logits):
+            dist = distrax.MultivariateNormalFullCovariance(
+                loc=jax.lax.stop_gradient(_loc),
+                covariance_matrix=jax.lax.stop_gradient(_cov + jitter * jnp.eye(_cov.shape[0])))
+            return dist.log_prob(_logits)
         reg_loss = - jnp.sum(jax.vmap(f_prior_fn)(
             f_mean.T, jnp.stack([f_cov[:, c, :, c] for c in range(b_logits.shape[-1])]), b_logits.T))
 
