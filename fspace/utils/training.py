@@ -59,6 +59,6 @@ def eval_classifier(state, loader):
     avg_nll = jnp.mean(all_nll, axis=0)
 
     return {
-        'acc': acc,
-        'avg_nll': avg_nll,
+        'acc': acc.item(),
+        'avg_nll': avg_nll.item(),
     }

@@ -48,11 +48,11 @@ def eval_classifier(state, loader):
     ece, _ = calibration(jax.nn.one_hot(all_Y, loader.dataset.n_classes), all_p, num_bins=10)
 
     return {
-        'acc': acc,
-        'sel_acc': sel_acc,
-        'avg_nll': avg_nll,
-        'avg_ent': avg_ent,
-        'ece': ece,
+        'acc': acc.item(),
+        'sel_acc': sel_acc.item(),
+        'avg_nll': avg_nll.item(),
+        'avg_ent': avg_ent.item(),
+        'ece': ece.item(),
     }
 
 

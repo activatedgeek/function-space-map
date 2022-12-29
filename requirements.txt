@@ -14,7 +14,7 @@ tensorflow-datasets
 torch<1.14
 torchvision
 timm
-jax[cuda11_cudnn82]<0.4
+jax[cuda11_cudnn82]<0.5
 flax<0.7
 optax<0.2
 distrax<0.2

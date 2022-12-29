@@ -91,9 +91,9 @@ def main(seed=42, log_dir=None, data_dir=None,
     auroc = roc_auc_score(all_targets, all_ent)
 
     logging.info({
-        'auroc': auroc,
-        'avg_ent': jnp.mean(p_ent, axis=0),
-        'ood_avg_ent': jnp.mean(ood_p_ent, axis=0),
+        'auroc': auroc.item(),
+        'avg_ent': jnp.mean(p_ent, axis=0).item(),
+        'ood_avg_ent': jnp.mean(ood_p_ent, axis=0).item(),
     }, extra=dict(metrics=True, prefix='test'))
 
 

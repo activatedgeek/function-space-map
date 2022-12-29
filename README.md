@@ -14,9 +14,9 @@ pip install 'torch<1.14' torchvision --extra-index-url https://download.pytorch.
 ```
 
 Install CUDA-compiled JAX version from [here](https://github.com/google/jax#installation). The
-codebase has been tested with JAX version `0.3`.
+codebase has been tested with JAX version `0.4`.
 ```shell
-pip install 'jax[cuda11_cudnn82]<0.4' -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+pip install 'jax[cuda11_cudnn82]<0.5' -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 ```
 
 And finally, run

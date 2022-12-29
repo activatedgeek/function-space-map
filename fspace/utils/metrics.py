@@ -43,25 +43,33 @@ def categorical_entropy(p):
 # @jax.jit
 def selective_accuracy(p, Y):
     '''Selective Prediction Accuracy
-
     Uses predictive entropy with T thresholds.
-
     Arguments:
         p: (B, d)
-    
+
     Returns:
         (B,)
     '''
-    T = 10
-    d = p.shape[-1]
-    thresholds = jnp.atleast_2d(
-        jnp.linspace(0., jnp.log(d) + 1e-8, num=T)).T ## (T,1)
 
-    entropy = jnp.atleast_2d(categorical_entropy(p)) ## (1,B)
+    thresholds = jnp.concatenate([jnp.linspace(100, 1, 100), jnp.array([0.1])], axis=0)
 
-    sel_mask = entropy < thresholds
-    accuracies = [accuracy(p[jnp.nonzero(mask)], Y[jnp.nonzero(mask)]) for mask in sel_mask]
+    predictions_test = p.argmax(-1)
+    accuracies_test = predictions_test == Y
+    scores_id = categorical_entropy(p)
 
-    norm_thresholds = thresholds / jnp.log(d)
+    thresholded_accuracies = []
+    for threshold in thresholds:
+        p = jnp.percentile(scores_id, threshold)
+        mask = jnp.array(scores_id <= p)
+        thresholded_accuracies.append(jnp.mean(accuracies_test[mask]))
+    values_id = jnp.array(thresholded_accuracies)
 
-    return auc(norm_thresholds, accuracies)
+    auc_sel_id = 0
+    for i in range(len(thresholds)-1):
+        if i == 0:
+            x = 100 - thresholds[i+1]
+        else:
+            x = thresholds[i] - thresholds[i+1]
+        auc_sel_id += (x * values_id[i] + x * values_id[i+1]) / 2
+
+    return auc_sel_id
