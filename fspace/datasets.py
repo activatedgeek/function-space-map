@@ -193,7 +193,7 @@ _DATASET_CFG = {
     'cifar10': {
         'n_classes': 10,
         'get_fn': get_cifar10,
-        'normalize': [(.4914, .4822, .4465), (.247, .243, .261)],
+        'normalize': [(.4914, .4822, .4465), (.2023, .1994, .2010)],
     },
     'cifar10_1': {
         'n_classes': 10,
