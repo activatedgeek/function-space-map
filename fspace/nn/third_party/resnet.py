@@ -60,6 +60,10 @@ class ResNet(nn.Module):
 
         # Mapping to classification output
         x = x.mean(axis=(1, 2))
+
+        # For function-space conditioning.
+        self.sow('intermediates', 'features', x)
+        
         x = nn.Dense(self.num_classes)(x)
         return x
 
