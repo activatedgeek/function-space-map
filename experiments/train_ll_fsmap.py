@@ -17,7 +17,10 @@ from fspace.utils.random import tree_split, sample_tree
 
 
 @jax.jit
-def train_step_fn(rng_tree, state, b_X, b_Y, b_X_ctx, reg_scale, prior_var, jitter=1e-4):
+def train_step_fn(rng_tree, state, b_X, b_Y, b_X_ctx, reg_scale, f_prior_std, pre_f_prior_std=1e-4, jitter=1e-4):
+    '''
+    NOTE: Prior means for all parameters is assumed to be zero.
+    '''
     B = b_X.shape[0]
 
     def loss_fn(params, **extra_vars):
@@ -28,13 +31,12 @@ def train_step_fn(rng_tree, state, b_X, b_Y, b_X_ctx, reg_scale, prior_var, jitt
 
         loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(b_logits[:B], b_Y))
 
-        ## NOTE: Assumes standard normal prior with zero mean and small variance for pre-final layers.
-        prior_params = sample_tree(rng_tree, state.params, 0., 1e-3)
+        prior_params = sample_tree(rng_tree, state.params, 0., pre_f_prior_std)
         h_X = jax.lax.stop_gradient(state.apply_fn({ 'params': prior_params, **extra_vars }, b_X_in,
                                                    mutable=['batch_stats', 'intermediates'], train=True)[1]['intermediates']['features'][0])
 
-        ## NOTE: All class output parameters have same cov due to same prior parameter cov.
-        f_h_cov = jnp.matmul(h_X * prior_var, h_X.T)
+        ## FIXME: add variances for "bias".
+        f_h_cov = jnp.matmul(h_X * f_prior_std**2, h_X.T)
         f_dist = distrax.MultivariateNormalFullCovariance(
             loc=jnp.zeros(f_h_cov.shape[0]), covariance_matrix=f_h_cov + jitter * jnp.eye(f_h_cov.shape[0]))
 
@@ -80,7 +82,8 @@ def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
          dataset=None, ctx_dataset=None, train_subset=1., label_noise=0.,
          batch_size=128, num_workers=4,
-         optimizer='sgd', lr=.1, momentum=.9, alpha=0., reg_scale=0., prior_var=1.,
+         optimizer='sgd', lr=.1, momentum=.9, alpha=0., reg_scale=0.,
+         pre_f_prior_std=1e-4, f_prior_std=1.,
          epochs=0):
     wandb.config.update({
         'log_dir': log_dir,
@@ -97,7 +100,8 @@ def main(seed=42, log_dir=None, data_dir=None,
         'momentum': momentum,
         'alpha': alpha,
         'reg_scale': reg_scale,
-        'prior_var': prior_var,
+        'pre_f_prior_std': pre_f_prior_std,
+        'f_prior_std': f_prior_std,
         'epochs': epochs,
     })
 
@@ -140,7 +144,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         **other_vars,
         tx=optimizer)
 
-    step_fn = lambda *args: train_step_fn(*args, reg_scale, prior_var)
+    step_fn = lambda *args: train_step_fn(*args, reg_scale, f_prior_std, pre_f_prior_std=pre_f_prior_std)
     train_fn = lambda *args, **kwargs: train_model(rng, *args, train_loader, step_fn,
                                                    ctx_loader=ctx_loader, log_dir=log_dir, **kwargs)
 
