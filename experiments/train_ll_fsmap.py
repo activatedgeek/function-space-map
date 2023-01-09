@@ -28,25 +28,17 @@ def train_step_fn(rng_tree, state, b_X, b_Y, b_X_ctx, reg_scale, prior_var, jitt
 
         loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(b_logits[:B], b_Y))
 
-        ## FIXME: assumes normal prior.
+        ## NOTE: Assumes standard normal prior with zero mean and small variance for pre-final layers.
         prior_params = sample_tree(rng_tree, state.params, 0., 1e-3)
-        h_fn = lambda _p, _x: state.apply_fn({ 'params': _p, **extra_vars }, _x, mutable=['batch_stats', 'intermediates'], train=True)[1]['intermediates']['features'][0]
-        h_X = jax.lax.stop_gradient(h_fn(prior_params, b_X_in))
+        h_X = jax.lax.stop_gradient(state.apply_fn({ 'params': prior_params, **extra_vars }, b_X_in,
+                                                   mutable=['batch_stats', 'intermediates'], train=True)[1]['intermediates']['features'][0])
 
-        ## FIXME: verify correctness and find a cleaner way.
-        H = h_X.shape[-1]
-        C = b_logits.shape[-1]
-        final_layer_prior_var = jax.tree_map(lambda x: x * 0 + prior_var, jax.lax.stop_gradient(params["Dense_0"]["kernel"]))
-        diag_mat = jnp.diagflat(final_layer_prior_var).reshape(H, C, H, C).transpose(1, 3, 0, 2)
-        f_cov = jnp.matmul(jnp.matmul(h_X, diag_mat), h_X.T).transpose(2, 0, 3, 1)
+        ## NOTE: All class output parameters have same cov due to same prior parameter cov.
+        f_h_cov = jnp.matmul(h_X * prior_var, h_X.T)
+        f_dist = distrax.MultivariateNormalFullCovariance(
+            loc=jnp.zeros(f_h_cov.shape[0]), covariance_matrix=f_h_cov + jitter * jnp.eye(f_h_cov.shape[0]))
 
-        ## FIXME: assumes zero prior mean.
-        def f_prior_fn(_cov, _logits):
-            dist = distrax.MultivariateNormalFullCovariance(
-                loc=jnp.zeros(_cov.shape[0]), covariance_matrix=_cov + jitter * jnp.eye(_cov.shape[0]))
-            return dist.log_prob(_logits)
-        reg_loss = - jnp.sum(jax.vmap(f_prior_fn)(
-            jnp.stack([f_cov[:, c, :, c] for c in range(b_logits.shape[-1])]), b_logits.T))
+        reg_loss = - jnp.sum(f_dist.log_prob(b_logits.T))
 
         total_loss = loss + reg_scale * reg_loss
 
