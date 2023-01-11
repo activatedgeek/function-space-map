@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 import optax
-from sklearn.metrics import auc
+from sklearn.metrics import roc_auc_score
 
 from .third_party.calibration import calibration  ## For external usage.
 
@@ -41,7 +41,7 @@ def categorical_entropy(p):
 
 
 # @jax.jit
-def selective_accuracy(p, Y):
+def selective_accuracy_auc(p, Y):
     '''Selective Prediction Accuracy
     Uses predictive entropy with T thresholds.
     Arguments:
@@ -73,3 +73,20 @@ def selective_accuracy(p, Y):
         auc_sel_id += (x * values_id[i] + x * values_id[i+1]) / 2
 
     return auc_sel_id
+
+
+@jax.jit
+def entropy_ood_auc(logits, logits_ood):
+    p = jax.nn.softmax(logits, axis=-1)
+    ood_p = jax.nn.softmax(logits_ood, axis=-1)
+
+    ent = categorical_entropy(p)
+    targets = jnp.zeros_like(ent)
+
+    ood_ent = categorical_entropy(ood_p)
+    ood_targets = jnp.ones_like(ood_ent)
+
+    all_ent = jnp.concatenate([ent, ood_ent])
+    all_targets = jnp.concatenate([targets, ood_targets])
+    
+    return roc_auc_score(all_targets, all_ent)

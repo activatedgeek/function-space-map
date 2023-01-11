@@ -5,38 +5,37 @@ from flax.training import checkpoints
 from flax.core.frozen_dict import freeze
 import jax
 import jax.numpy as jnp
-import optax
 
 from fspace.utils.logging import set_logging, finish_logging, wandb
-from fspace.datasets import get_dataset
+from fspace.datasets import get_dataset, get_dataset_normalization
 from fspace.nn import create_model
-from fspace.utils.training import TrainState
 from fspace.utils.metrics import \
-    accuracy, selective_accuracy, categorical_entropy, categorical_nll, calibration
+    accuracy, selective_accuracy_auc, categorical_entropy, categorical_nll, calibration, entropy_ood_auc
 
 
-def eval_classifier(state, loader):
+def eval_logits(f, loader):
     all_logits = []
     all_Y = []
-
-    @jax.jit
-    def _forward(X):
-        return state.apply_fn({ 'params': state.params, **state.extra_vars}, X,
-                              mutable=False, train=False)
 
     for X, Y in tqdm(loader, leave=False):
         X, Y = X.numpy(), Y.numpy()
 
-        all_logits.append(_forward(X))
+        all_logits.append(f(X))
         all_Y.append(Y)
 
     all_logits = jnp.concatenate(all_logits)
     all_Y = jnp.concatenate(all_Y)
 
+    return all_logits, all_Y
+
+
+def eval_classifier(all_logits, all_Y):
+    n_classes = all_logits.shape[-1]
+
     all_p = jax.nn.softmax(all_logits, axis=-1)
 
     acc = accuracy(all_logits, all_Y)
-    sel_acc = selective_accuracy(all_p, all_Y)
+    sel_acc = selective_accuracy_auc(all_p, all_Y)
 
     all_nll = categorical_nll(all_logits, all_Y)
     avg_nll = jnp.mean(all_nll, axis=0)
@@ -45,7 +44,7 @@ def eval_classifier(state, loader):
     avg_ent = jnp.mean(all_ent, axis=0)
 
     ## TODO: JIT this?
-    ece, _ = calibration(jax.nn.one_hot(all_Y, loader.dataset.n_classes), all_p, num_bins=10)
+    ece, _ = calibration(jax.nn.one_hot(all_Y, n_classes), all_p, num_bins=10)
 
     return {
         'acc': acc.item(),
@@ -58,14 +57,15 @@ def eval_classifier(state, loader):
 
 def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
-         dataset=None,
-         batch_size=128, num_workers=4):
+         dataset=None, ood_dataset=None,
+         batch_size=512, num_workers=4):
     wandb.config.update({
         'log_dir': log_dir,
         'seed': seed,
         'model_name': model_name,
         'ckpt_path': ckpt_path,
         'dataset': dataset,
+        'ood_dataset': ood_dataset,
         'batch_size': batch_size,
     })
 
@@ -89,20 +89,38 @@ def main(seed=42, log_dir=None, data_dir=None,
 
     other_vars, params = init_vars.pop('params')
 
-    train_state = TrainState.create(
-        apply_fn=model.apply,
-        params=params,
-        **other_vars,
-        tx=optax.sgd(learning_rate=0.))
+    @jax.jit
+    def f_model(X):
+        return model.apply({ 'params': params, **other_vars}, X, mutable=False, train=False)
 
-    train_metrics = eval_classifier(train_state, train_loader)
+    logging.info(f'Evaluating train metrics...')
+    train_metrics = eval_classifier(*eval_logits(f_model, train_loader))
     logging.info(train_metrics, extra=dict(metrics=True, prefix='train'))
 
-    val_metrics = eval_classifier(train_state, val_loader if val_loader.dataset is not None else test_loader)
+    logging.info(f'Evaluating test metrics...')
+    test_logits, test_Y = eval_logits(f_model, test_loader)
+    test_metrics = eval_classifier(test_logits, test_Y)
+    logging.info(test_metrics, extra=dict(metrics=True, prefix='test'))
+
+    if val_loader.dataset is not None:
+        logging.info(f'Evaluating validation metrics...')
+        val_metrics = eval_classifier(*eval_logits(f_model, val_loader))
+    else:
+        val_metrics = test_metrics
     logging.info(val_metrics, extra=dict(metrics=True, prefix='val'))
 
-    test_metrics = eval_classifier(train_state, test_loader)
-    logging.info(test_metrics, extra=dict(metrics=True, prefix='test'))
+    if ood_dataset is not None:
+        logging.info(f'Evaluating OOD metrics...')
+
+        _, _, ood_test_data = get_dataset(ood_dataset, root=data_dir, seed=seed,
+                                          normalize=get_dataset_normalization(dataset))
+        ood_test_loader = DataLoader(ood_test_data, batch_size=batch_size, num_workers=num_workers)
+
+        ood_test_logits, ood_test_Y = eval_logits(f_model, ood_test_loader)
+        ood_test_metrics = eval_classifier(ood_test_logits, ood_test_Y)
+        ood_auc = entropy_ood_auc(test_logits, ood_test_logits)
+
+        logging.info({ **ood_test_metrics, 'auc': ood_auc }, extra=dict(metrics=True, prefix='ood_test'))
 
 
 def entrypoint(log_dir=None, **kwargs):
