@@ -35,8 +35,8 @@ def train_step_fn(rng_tree, state, b_X, b_Y, b_X_ctx, reg_scale, f_prior_std, pr
         h_X = jax.lax.stop_gradient(state.apply_fn({ 'params': prior_params, **extra_vars }, b_X_in,
                                                    mutable=['batch_stats', 'intermediates'], train=True)[1]['intermediates']['features'][0])
 
-        ## FIXME: add variances for "bias".
         f_h_cov = jnp.matmul(h_X * f_prior_std**2, h_X.T)
+        f_h_cov = f_h_cov + f_prior_std**2 * jnp.ones_like(f_h_cov)
         f_dist = distrax.MultivariateNormalFullCovariance(
             loc=jnp.zeros(f_h_cov.shape[0]), covariance_matrix=f_h_cov + jitter * jnp.eye(f_h_cov.shape[0]))
 
