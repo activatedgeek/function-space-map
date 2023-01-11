@@ -75,7 +75,6 @@ def selective_accuracy_auc(p, Y):
     return auc_sel_id
 
 
-@jax.jit
 def entropy_ood_auc(logits, logits_ood):
     p = jax.nn.softmax(logits, axis=-1)
     ood_p = jax.nn.softmax(logits_ood, axis=-1)
