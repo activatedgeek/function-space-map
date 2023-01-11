@@ -17,7 +17,7 @@ from fspace.utils.random import tree_split, sample_tree
 
 
 @jax.jit
-def train_step_fn(rng_tree, state, b_X, b_Y, b_X_ctx, reg_scale, f_prior_std, pre_f_prior_std=1e-4, jitter=1e-4):
+def train_step_fn(rng_tree, state, b_X, b_Y, b_X_ctx, f_prior_std, pre_f_prior_std, jitter=1e-4):
     '''
     NOTE: Prior means for all parameters is assumed to be zero.
     '''
@@ -36,13 +36,13 @@ def train_step_fn(rng_tree, state, b_X, b_Y, b_X_ctx, reg_scale, f_prior_std, pr
                                                    mutable=['batch_stats', 'intermediates'], train=True)[1]['intermediates']['features'][0])
 
         f_h_cov = jnp.matmul(h_X * f_prior_std**2, h_X.T)
-        f_h_cov = f_h_cov + f_prior_std**2 * jnp.ones_like(f_h_cov)
+        f_h_cov = f_h_cov + f_prior_std**2 * jnp.ones_like(f_h_cov) + jitter * jnp.eye(f_h_cov.shape[0])
         f_dist = distrax.MultivariateNormalFullCovariance(
-            loc=jnp.zeros(f_h_cov.shape[0]), covariance_matrix=f_h_cov + jitter * jnp.eye(f_h_cov.shape[0]))
+            loc=jnp.zeros(f_h_cov.shape[0]), covariance_matrix=f_h_cov)
 
         reg_loss = - jnp.sum(f_dist.log_prob(b_logits.T))
 
-        total_loss = loss + reg_scale * reg_loss
+        total_loss = loss + reg_loss
 
         return total_loss, new_state
 
@@ -82,7 +82,7 @@ def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
          dataset=None, ctx_dataset=None, train_subset=1., label_noise=0.,
          batch_size=128, num_workers=4,
-         optimizer='sgd', lr=.1, momentum=.9, alpha=0., reg_scale=0.,
+         optimizer='sgd', lr=.1, momentum=.9, alpha=0.,
          pre_f_prior_std=1e-4, f_prior_std=1.,
          epochs=0):
     wandb.config.update({
@@ -99,7 +99,6 @@ def main(seed=42, log_dir=None, data_dir=None,
         'lr': lr,
         'momentum': momentum,
         'alpha': alpha,
-        'reg_scale': reg_scale,
         'pre_f_prior_std': pre_f_prior_std,
         'f_prior_std': f_prior_std,
         'epochs': epochs,
@@ -144,7 +143,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         **other_vars,
         tx=optimizer)
 
-    step_fn = lambda *args: train_step_fn(*args, reg_scale, f_prior_std, pre_f_prior_std=pre_f_prior_std)
+    step_fn = lambda *args: train_step_fn(*args, f_prior_std, pre_f_prior_std)
     train_fn = lambda *args, **kwargs: train_model(rng, *args, train_loader, step_fn,
                                                    ctx_loader=ctx_loader, log_dir=log_dir, **kwargs)
 
