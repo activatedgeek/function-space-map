@@ -13,11 +13,10 @@ from fspace.utils.logging import set_logging, finish_logging, wandb
 from fspace.datasets import get_dataset, get_dataset_normalization
 from fspace.nn import create_model
 from fspace.utils.training import TrainState, eval_classifier
-from fspace.utils.random import tree_split, sample_tree
 
 
 @jax.jit
-def train_step_fn(rng_tree, state, b_X, b_Y, b_X_ctx, f_prior_std, pre_f_prior_std, jitter=1e-4):
+def train_step_fn(prior_params, state, b_X, b_Y, b_X_ctx, f_prior_std, jitter=1e-4):
     '''
     NOTE: Prior means for all parameters is assumed to be zero.
     '''
@@ -31,7 +30,6 @@ def train_step_fn(rng_tree, state, b_X, b_Y, b_X_ctx, f_prior_std, pre_f_prior_s
 
         loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(b_logits[:B], b_Y))
 
-        prior_params = sample_tree(rng_tree, state.params, 0., pre_f_prior_std)
         h_X = jax.lax.stop_gradient(state.apply_fn({ 'params': prior_params, **extra_vars }, b_X_in,
                                                    mutable=['batch_stats', 'intermediates'], train=True)[1]['intermediates']['features'][0])
 
@@ -53,7 +51,7 @@ def train_step_fn(rng_tree, state, b_X, b_Y, b_X_ctx, f_prior_std, pre_f_prior_s
     return final_state, loss
 
 
-def train_model(rng, state, loader, step_fn, ctx_loader=None, log_dir=None, epoch=None):
+def train_model(prior_sample, state, loader, step_fn, ctx_loader=None, log_dir=None, epoch=None):
     ctx_iter = iter(ctx_loader or [[None, None]])
 
     for i, (X, Y) in tqdm(enumerate(loader), leave=False):
@@ -66,9 +64,7 @@ def train_model(rng, state, loader, step_fn, ctx_loader=None, log_dir=None, epoc
         if X_ctx is not None:
             X_ctx = X_ctx.numpy()
 
-        rng, rng_tree = tree_split(rng, state.params)
-
-        state, loss = step_fn(rng_tree, state, X, Y, X_ctx)
+        state, loss = step_fn(prior_sample, state, X, Y, X_ctx)
 
         if log_dir is not None and i % 100 == 0:
             metrics = { 'epoch': epoch, 'mini_loss': loss.item() }
@@ -83,7 +79,7 @@ def main(seed=42, log_dir=None, data_dir=None,
          dataset=None, ctx_dataset=None, train_subset=1., label_noise=0.,
          batch_size=128, num_workers=4,
          optimizer='sgd', lr=.1, momentum=.9, alpha=0.,
-         pre_f_prior_std=1e-4, f_prior_std=1.,
+         f_prior_std=1.,
          epochs=0):
     wandb.config.update({
         'log_dir': log_dir,
@@ -99,7 +95,6 @@ def main(seed=42, log_dir=None, data_dir=None,
         'lr': lr,
         'momentum': momentum,
         'alpha': alpha,
-        'pre_f_prior_std': pre_f_prior_std,
         'f_prior_std': f_prior_std,
         'epochs': epochs,
     })
@@ -143,13 +138,17 @@ def main(seed=42, log_dir=None, data_dir=None,
         **other_vars,
         tx=optimizer)
 
-    step_fn = lambda *args: train_step_fn(*args, f_prior_std, pre_f_prior_std)
-    train_fn = lambda *args, **kwargs: train_model(rng, *args, train_loader, step_fn,
+    step_fn = lambda *args: train_step_fn(*args, f_prior_std)
+    train_fn = lambda *args, **kwargs: train_model(*args, train_loader, step_fn,
                                                    ctx_loader=ctx_loader, log_dir=log_dir, **kwargs)
 
     best_acc_so_far = 0.
     for e in tqdm(range(epochs)):
-        train_state = train_fn(train_state, epoch=e)
+        rng, model_init_rng = jax.random.split(rng)
+        init_vars = model.init(model_init_rng, train_data[0][0].numpy()[None, ...])
+        _, init_params = init_vars.pop('params')
+
+        train_state = train_fn(init_params, train_state, epoch=e)
 
         val_metrics = eval_classifier(train_state, val_loader if val_loader.dataset is not None else test_loader)
         logging.info({ 'epoch': e, **val_metrics }, extra=dict(metrics=True, prefix='val'))
@@ -173,7 +172,13 @@ def main(seed=42, log_dir=None, data_dir=None,
             checkpoints.save_checkpoint(ckpt_dir=log_dir,
                                         target={'params': train_state.params, **train_state.extra_vars},
                                         step=e,
+                                        prefix='best_checkpoint_',
                                         overwrite=True)
+
+        checkpoints.save_checkpoint(ckpt_dir=log_dir,
+                                    target={'params': train_state.params, **train_state.extra_vars},
+                                    step=e,
+                                    overwrite=True)
 
 
 def entrypoint(log_dir=None, **kwargs):
