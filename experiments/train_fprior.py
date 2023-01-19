@@ -1469,9 +1469,6 @@ def train_classifier(*args, num_epochs, rng_key, **kwargs):
     if save_to_wandb:
         wandb.config = copy(kwargs)
         wandb.init(
-            project=wandb_project,
-            name=trainer.run_name,
-            entity=wandb_account,
             config=wandb.config,
         )
         trainer.log_dir = wandb.run.dir
