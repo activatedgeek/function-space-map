@@ -42,13 +42,18 @@ def train_step_fn(prior_params, state, b_X, b_Y, b_X_ctx, f_prior_std, jitter=1e
 
         total_loss = loss + reg_loss
 
-        return total_loss, new_state
+        return total_loss, (new_state, loss, reg_loss)
 
-    (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params, **state.extra_vars)
+    (_, (new_state, loss, reg_loss)), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params, **state.extra_vars)
 
     final_state = state.apply_gradients(grads=grads, **new_state)
 
-    return final_state, loss
+    step_metrics = {
+        'batch_loss': loss,
+        'batch_reg_loss': reg_loss,
+    }
+
+    return final_state, step_metrics
 
 
 def train_model(prior_sample, state, loader, step_fn, ctx_loader=None, log_dir=None, epoch=None):
@@ -64,12 +69,11 @@ def train_model(prior_sample, state, loader, step_fn, ctx_loader=None, log_dir=N
         if X_ctx is not None:
             X_ctx = X_ctx.numpy()
 
-        state, loss = step_fn(prior_sample, state, X, Y, X_ctx)
+        state, step_metrics = step_fn(prior_sample, state, X, Y, X_ctx)
 
         if log_dir is not None and i % 100 == 0:
-            metrics = { 'epoch': epoch, 'mini_loss': loss.item() }
-            logging.info(metrics, extra=dict(metrics=True, prefix='train'))
-            logging.debug(f'Epoch {epoch}: {loss.item():.4f}')
+            step_metrics = { k: v.item() for k, v in step_metrics.items() }
+            logging.info({ 'epoch': epoch, **step_metrics }, extra=dict(metrics=True, prefix='train'))
 
     return state
 

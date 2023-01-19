@@ -28,7 +28,11 @@ def train_step_fn(state, b_X, b_Y):
 
     final_state = state.apply_gradients(grads=grads, **new_state)
 
-    return final_state, loss
+    step_metrics = {
+        'batch_loss': loss,
+    }
+
+    return final_state, step_metrics
 
 
 def main(seed=42, log_dir=None, data_dir=None,
