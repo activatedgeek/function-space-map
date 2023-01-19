@@ -4,7 +4,6 @@ from torch.utils.data import DataLoader
 import jax
 import jax.numpy as jnp
 from flax.training import checkpoints
-from flax.core.frozen_dict import freeze
 import optax
 import distrax
 import timm
@@ -13,6 +12,7 @@ from fspace.utils.logging import set_logging, finish_logging, wandb
 from fspace.datasets import get_dataset, get_dataset_normalization
 from fspace.nn import create_model
 from fspace.utils.training import TrainState, eval_classifier
+from fspace.scripts.evaluate import full_eval_model
 
 
 @jax.jit
@@ -76,7 +76,8 @@ def train_model(prior_sample, state, loader, step_fn, ctx_loader=None, log_dir=N
 
 def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
-         dataset=None, ctx_dataset=None, train_subset=1., label_noise=0.,
+         dataset=None, ctx_dataset=None, ood_dataset=None,
+         train_subset=1., label_noise=0.,
          batch_size=128, num_workers=4,
          optimizer='sgd', lr=.1, momentum=.9, alpha=0.,
          f_prior_std=1.,
@@ -88,6 +89,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         'ckpt_path': ckpt_path,
         'dataset': dataset,
         'ctx_dataset': ctx_dataset,
+        'ood_dataset': ood_dataset,
         'train_subset': train_subset,
         'label_noise': label_noise,
         'batch_size': batch_size,
@@ -105,7 +107,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         dataset, root=data_dir, seed=seed, train_subset=train_subset, label_noise=label_noise)
     train_loader = DataLoader(train_data, batch_size=batch_size, num_workers=num_workers,
                               shuffle=True)
-    val_loader = DataLoader(val_data, batch_size=batch_size, num_workers=num_workers)
+    val_loader = DataLoader(val_data, batch_size=batch_size, num_workers=num_workers) if val_data is not None else None
     test_loader = DataLoader(test_data, batch_size=batch_size, num_workers=num_workers)
 
     ctx_loader = None
@@ -116,14 +118,8 @@ def main(seed=42, log_dir=None, data_dir=None,
                                 shuffle=not isinstance(ctx_data, timm.data.IterableImageDataset))
         logging.debug(f'Using {ctx_dataset} for context samples.')
 
-    model = create_model(model_name, num_classes=train_data.n_classes)
-    if ckpt_path is not None:
-        init_vars = freeze(checkpoints.restore_checkpoint(ckpt_dir=ckpt_path, target=None))
-        logging.info(f'Loaded checkpoint from "{ckpt_path}".')
-    else:
-        rng, model_init_rng = jax.random.split(rng)
-        init_vars = model.init(model_init_rng, train_data[0][0].numpy()[None, ...])
-    other_vars, params = init_vars.pop('params')
+    rng, model, init_params, init_vars = create_model(rng, model_name, train_data[0][0].numpy()[None, ...],
+                                                      num_classes=train_data.n_classes, ckpt_path=ckpt_path)
 
     if optimizer == 'adamw':
         optimizer = optax.adamw(learning_rate=lr)
@@ -134,8 +130,8 @@ def main(seed=42, log_dir=None, data_dir=None,
 
     train_state = TrainState.create(
         apply_fn=model.apply,
-        params=params,
-        **other_vars,
+        params=init_params,
+        **init_vars,
         tx=optimizer)
 
     step_fn = lambda *args: train_step_fn(*args, f_prior_std)
@@ -144,30 +140,18 @@ def main(seed=42, log_dir=None, data_dir=None,
 
     best_acc_so_far = 0.
     for e in tqdm(range(epochs)):
-        rng, model_init_rng = jax.random.split(rng)
-        init_vars = model.init(model_init_rng, train_data[0][0].numpy()[None, ...])
-        _, init_params = init_vars.pop('params')
+        rng, _, reinit_params, _ = create_model(rng, model_name, train_data[0][0].numpy()[None, ...],
+                                                num_classes=train_data.n_classes)
 
-        train_state = train_fn(init_params, train_state, epoch=e)
+        train_state = train_fn(reinit_params, train_state, epoch=e)
 
-        val_metrics = eval_classifier(train_state, val_loader if val_loader.dataset is not None else test_loader)
+        val_metrics = eval_classifier(train_state, val_loader or test_loader)
         logging.info({ 'epoch': e, **val_metrics }, extra=dict(metrics=True, prefix='val'))
 
         if val_metrics['acc'] > best_acc_so_far:
             best_acc_so_far = val_metrics['acc']
 
-            train_metrics = eval_classifier(train_state, train_loader)
-            logging.info({ 'epoch': e, **train_metrics }, extra=dict(metrics=True, prefix='train'))
-
-            test_metrics = eval_classifier(train_state, test_loader)
-            logging.info({ 'epoch': e, **test_metrics }, extra=dict(metrics=True, prefix='test'))
-
-            wandb.run.summary['val/best_epoch'] = e
-            wandb.run.summary['train/best_acc'] = train_metrics['acc']
-            wandb.run.summary['val/best_acc'] = val_metrics['acc']
-            wandb.run.summary['test/best_acc'] = test_metrics['acc']
-
-            logging.info(f"Epoch {e}: {train_metrics['acc']:.4f} (Train) / {val_metrics['acc']:.4f} (Val) / {test_metrics['acc']:.4f} (Test)")
+            logging.info(f"Epoch {e}: {best_acc_so_far:.4f} (Val)")
 
             checkpoints.save_checkpoint(ckpt_dir=log_dir,
                                         target={'params': train_state.params, **train_state.extra_vars},
@@ -179,6 +163,21 @@ def main(seed=42, log_dir=None, data_dir=None,
                                     target={'params': train_state.params, **train_state.extra_vars},
                                     step=e,
                                     overwrite=True)
+
+    ## Full evaluation only at the end of training.
+    ood_test_loader = None
+    if ood_dataset is not None:
+        _, _, ood_test_data = get_dataset(ood_dataset, root=data_dir, seed=seed,
+                                          normalize=get_dataset_normalization(dataset))
+        ood_test_loader = DataLoader(ood_test_data, batch_size=batch_size, num_workers=num_workers)
+
+    full_eval_model(model_name, train_data.n_classes, log_dir,
+                    train_loader, test_loader, val_loader=val_loader, ood_loader=ood_test_loader,
+                    ckpt_prefix='checkpoint_', log_prefix='s/')
+
+    full_eval_model(model_name, train_data.n_classes, log_dir,
+                    train_loader, test_loader, val_loader=val_loader, ood_loader=ood_test_loader,
+                    ckpt_prefix='best_checkpoint_', log_prefix='s/best/')
 
 
 def entrypoint(log_dir=None, **kwargs):
