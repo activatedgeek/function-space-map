@@ -4,7 +4,7 @@ from flax.training import checkpoints
 from flax.core.frozen_dict import freeze
 
 from .cnn import SmallCNN, TinyCNN
-from .third_party.resnet import ResNet9, ResNet18
+from .third_party.resnet import ResNet9, ResNet18, ResNet50
 
 
 __MODEL_CFG = {
@@ -13,6 +13,9 @@ __MODEL_CFG = {
     },
     'resnet18': {
         'model_cls': ResNet18,
+    },
+    'resnet50': {
+        'model_cls': ResNet50,
     },
     'smallcnn': {
         'model_cls': SmallCNN,
