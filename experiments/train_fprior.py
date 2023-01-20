@@ -476,21 +476,21 @@ elif dataset == 'cifar100' or dataset == 'cifar100-224':
     test_transform = transforms.Compose(test_transform_list)
     train_transform = transforms.Compose(train_transform_list)
 
-    _train_dataset = CIFAR100(root="./data/CIFAR100", train=True, transform=train_transform, download=False)
+    _train_dataset = CIFAR100(root=data_dir, train=True, transform=train_transform, download=False)
     # val_dataset = CIFAR100(root=DATASET_PATH, train=True, transform=test_transform, download=True)
-    val_dataset = CIFAR100(root="./data/CIFAR100", train=True, transform=test_transform, download=False)
+    val_dataset = CIFAR100(root=data_dir, train=True, transform=test_transform, download=False)
 
     train_dataset, _ = torch.utils.data.random_split(_train_dataset, [training_dataset_size, 0], generator=torch.Generator().manual_seed(seed))
     _, validation_dataset = torch.utils.data.random_split(val_dataset, [training_dataset_size-validation_dataset_size, validation_dataset_size], generator=torch.Generator().manual_seed(seed))
 
     # test_dataset = CIFAR100(root=DATASET_PATH, train=False, transform=test_transform, download=True)
-    test_dataset = CIFAR100(root="./data/CIFAR100", train=False, transform=test_transform, download=False)
+    test_dataset = CIFAR100(root=data_dir, train=False, transform=test_transform, download=False)
 
     n_context_points = 128
-    context_dataset = CIFAR10(root="./data/CIFAR10", train=True, transform=train_transform, download=False)
+    context_dataset = CIFAR10(root=data_dir, train=True, transform=train_transform, download=False)
     context_set, _ = torch.utils.data.random_split(context_dataset, [50000, 0], generator=torch.Generator().manual_seed(seed))
 
-    ood_dataset = SVHN(root="./data/SVHN", split="test", download=False, transform=test_transform)
+    ood_dataset = SVHN(root=Path(data_dir) / 'svhn', split="test", download=False, transform=test_transform)
     ood_loader = data.DataLoader(ood_dataset,
                                  batch_size=128,
                                  shuffle=False,
@@ -500,7 +500,7 @@ elif dataset == 'cifar100' or dataset == 'cifar100-224':
                                  persistent_workers=True)
 
 elif dataset == 'fmnist' or dataset == 'fmnist-224':
-    _train_dataset = FashionMNIST(root="./data/fashionMNIST", train=True, download=False)
+    _train_dataset = FashionMNIST(root=data_dir, train=True, download=False)
     input_dim = 28
     num_classes = 10
     dataset_size = 60000
@@ -548,19 +548,19 @@ elif dataset == 'fmnist' or dataset == 'fmnist-224':
         test_transform_list.append(image_to_numpy)
         train_transform_list.append(image_to_numpy)
 
-    _train_dataset = FashionMNIST(root="./data/fashionMNIST", train=True, transform=train_transform, download=False)
-    val_dataset = FashionMNIST(root="./data/fashionMNIST", train=True, transform=test_transform, download=False)
+    _train_dataset = FashionMNIST(root=data_dir, train=True, transform=train_transform, download=False)
+    val_dataset = FashionMNIST(root=data_dir, train=True, transform=test_transform, download=False)
 
     train_dataset, _ = torch.utils.data.random_split(_train_dataset, [training_dataset_size, 0], generator=torch.Generator().manual_seed(seed))
     _, validation_dataset = torch.utils.data.random_split(val_dataset, [training_dataset_size-validation_dataset_size, validation_dataset_size], generator=torch.Generator().manual_seed(seed))
 
-    test_dataset = FashionMNIST(root="./data/fashionMNIST", train=False, transform=test_transform, download=False)
+    test_dataset = FashionMNIST(root=data_dir, train=False, transform=test_transform, download=False)
 
     n_context_points = 128
-    context_dataset = KMNIST(root="./data/", train=True, transform=test_transform, download=False)
+    context_dataset = KMNIST(root=data_dir, train=True, transform=test_transform, download=False)
     context_set, _ = torch.utils.data.random_split(context_dataset, [60000, 0], generator=torch.Generator().manual_seed(seed))
 
-    ood_dataset = MNIST("./data/", train=False, download=False, transform=test_transform)
+    ood_dataset = MNIST(root=data_dir, train=False, download=False, transform=test_transform)
     ood_loader = data.DataLoader(ood_dataset,
                                  batch_size=128,
                                  shuffle=False,
@@ -570,7 +570,7 @@ elif dataset == 'fmnist' or dataset == 'fmnist-224':
                                  persistent_workers=True)
 
 elif dataset == 'mnist' or dataset == 'mnist-224':
-    _train_dataset = FashionMNIST(root="./data/", train=True, download=False)
+    _train_dataset = FashionMNIST(root=data_dir, train=True, download=False)
     input_dim = 28
     num_classes = 10
     dataset_size = 60000
@@ -618,19 +618,19 @@ elif dataset == 'mnist' or dataset == 'mnist-224':
         test_transform_list.append(image_to_numpy)
         train_transform_list.append(image_to_numpy)
 
-    _train_dataset = MNIST(root="./data/", train=True, transform=train_transform, download=False)
-    val_dataset = MNIST(root="./data/", train=True, transform=test_transform, download=False)
+    _train_dataset = MNIST(root=data_dir, train=True, transform=train_transform, download=False)
+    val_dataset = MNIST(root=data_dir, train=True, transform=test_transform, download=False)
 
     train_dataset, _ = torch.utils.data.random_split(_train_dataset, [training_dataset_size, 0], generator=torch.Generator().manual_seed(seed))
     _, validation_dataset = torch.utils.data.random_split(val_dataset, [training_dataset_size-validation_dataset_size, validation_dataset_size], generator=torch.Generator().manual_seed(seed))
 
-    test_dataset = MNIST(root="./data/", train=False, transform=test_transform, download=False)
+    test_dataset = MNIST(root=data_dir, train=False, transform=test_transform, download=False)
 
     n_context_points = 128
-    context_dataset = KMNIST(root="./data/", train=True, transform=test_transform, download=False)
+    context_dataset = KMNIST(root=data_dir, train=True, transform=test_transform, download=False)
     context_set, _ = torch.utils.data.random_split(context_dataset, [60000, 0], generator=torch.Generator().manual_seed(seed))
 
-    ood_dataset = FashionMNIST("./data/fashionMNIST", train=False, download=False, transform=test_transform)
+    ood_dataset = FashionMNIST(data_dir, train=False, download=False, transform=test_transform)
     ood_loader = data.DataLoader(ood_dataset,
                                  batch_size=128,
                                  shuffle=False,

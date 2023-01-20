@@ -74,6 +74,7 @@ def train_model(prior_sample, state, loader, step_fn, ctx_loader=None, log_dir=N
         if log_dir is not None and i % 100 == 0:
             step_metrics = { k: v.item() for k, v in step_metrics.items() }
             logging.info({ 'epoch': epoch, **step_metrics }, extra=dict(metrics=True, prefix='train'))
+            logging.debug(step_metrics)
 
     return state
 
