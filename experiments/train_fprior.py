@@ -1469,6 +1469,7 @@ def train_classifier(*args, num_epochs, rng_key, **kwargs):
     if save_to_wandb:
         wandb.config = copy(kwargs)
         wandb.init(
+            mode=os.environ.get('WANDB_MODE', default='offline'),
             config=wandb.config,
         )
         trainer.log_dir = wandb.run.dir
@@ -1496,6 +1497,10 @@ def train_classifier(*args, num_epochs, rng_key, **kwargs):
     trainer.eval_model(rng_key)
     # print(f"\nValidation Accuracy: {val_acc*100:.2f}")
     print(f"Train Accuracy: {trainer.logger['acc_train'][-1]:.2f}  |  Test Accuracy: {trainer.logger['acc_test'][-1]:.2f}  |  Selective Accuracy: {trainer.logger['acc_sel_test'][-1]:.2f}  |  NLL: {trainer.logger['nll_test'][-1]:.3f}  |  Test ECE: {trainer.logger['ece_test'][-1]:.2f}  |  OOD AUROC: {trainer.logger['ood_auroc_entropy'][-1]:.2f}  |  Entropy Test: {trainer.logger['predictive_entropy_test'][-1]:.2f}  |  Entropy Context: {trainer.logger['predictive_entropy_context'][-1]:.2f}  |  Entropy OOD: {trainer.logger['predictive_entropy_ood'][-1]:.2f}")
+
+    if save_to_wandb:
+        wandb.finish()
+
     return trainer, trainer.logger
 
 
