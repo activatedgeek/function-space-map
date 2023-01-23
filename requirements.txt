@@ -9,6 +9,7 @@ numpy
 scipy
 pandas
 scikit-learn
+opencv-python
 tensorflow<2.12
 tensorflow-datasets
 torch<1.14
