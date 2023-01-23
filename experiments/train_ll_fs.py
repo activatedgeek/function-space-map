@@ -85,7 +85,7 @@ def main(seed=42, log_dir=None, data_dir=None,
          train_subset=1., label_noise=0.,
          batch_size=128, num_workers=4,
          optimizer='sgd', lr=.1, momentum=.9, alpha=0.,
-         f_prior_std=1.,
+         f_prior_std=1., weight_decay=0.,
          epochs=0):
     wandb.config.update({
         'log_dir': log_dir,
@@ -103,6 +103,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         'momentum': momentum,
         'alpha': alpha,
         'f_prior_std': f_prior_std,
+        'weight_decay': weight_decay,
         'epochs': epochs,
     })
 
@@ -129,7 +130,10 @@ def main(seed=42, log_dir=None, data_dir=None,
     if optimizer == 'adamw':
         optimizer = optax.adamw(learning_rate=lr)
     elif optimizer == 'sgd':
-        optimizer = optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader), alpha), momentum=momentum)
+        optimizer = optax.chain(
+            optax.add_decayed_weights(weight_decay),
+            optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader), alpha), momentum=momentum),
+        )
     else:
         raise NotImplementedError
 

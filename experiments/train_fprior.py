@@ -75,6 +75,7 @@ parser.add_argument('--reg_type', type=str, default='function_prior')  # functio
 parser.add_argument('--context_points', type=str, default='none')  # none, train, ood, joint
 parser.add_argument("--mc_samples_llk", type=int, default=1)
 parser.add_argument("--mc_samples_reg", type=int, default=1)
+parser.add_argument("--mc_samples_eval", type=int, default=1)
 parser.add_argument("--reg_scale", type=float, default=1)
 parser.add_argument("--prior_mean", type=float, default=0)
 parser.add_argument("--prior_var", type=float, default=0)
@@ -106,6 +107,7 @@ reg_type = args.reg_type
 context_points = args.context_points
 mc_samples_llk = args.mc_samples_llk
 mc_samples_reg = args.mc_samples_reg
+mc_samples_eval = args.mc_samples_eval
 reg_scale = args.reg_scale
 prior_mean = args.prior_mean
 prior_var = args.prior_var
@@ -764,6 +766,9 @@ class TrainerModule:
         self.optimizer_hparams = optimizer_hparams
         self.objective_hparams = objective_hparams
         self.seed = seed
+        self.n_batches_eval = 10
+        self.n_batches_eval_context = 10
+        self.n_batches_eval_final = 100
         self.mc_samples_llk = objective_hparams["mc_samples_llk"]
         self.mc_samples_reg = objective_hparams["mc_samples_reg"]
         self.training_dataset_size = objective_hparams["training_dataset_size"]
@@ -796,7 +801,8 @@ class TrainerModule:
         self.create_functions()
         self.prior_mean = objective_hparams["prior_mean"]
         self.prior_var = objective_hparams["prior_var"]
-        self.init_logvar = self.prior_feature_logvar = -50
+        self.init_logvar = -50
+        self.prior_feature_logvar = -50
         # self.init_logvar = self.prior_feature_logvar = -1  # for non-init distribution feature variance
         self.params_prior_mean = None
         self.params_prior_logvar = None
@@ -807,6 +813,7 @@ class TrainerModule:
         # print(self.model.tabulate(random.PRNGKey(0), x=exmp_inputs[0]))
 
         assert self.mc_samples_llk == 1 if not self.stochastic else True
+        assert mc_samples_eval == 1 if not self.stochastic else True
         assert self.mc_samples_reg == 1 # if not ("fsmap" in method or "fsvi" in method) else True  # currently not implemented
 
     def create_functions(self):
@@ -830,7 +837,7 @@ class TrainerModule:
             params_feature_logvar, params_final_layer_logvar = split_params(params_logvar, "dense")
 
             ### sample feature parameters and merge with final-layer mean parameters
-            params_feature_sample = sample_parameters(params_feature_mean, params_feature_logvar, rng_key)
+            params_feature_sample = sample_parameters(params_feature_mean, params_feature_logvar, self.stochastic, rng_key)
             params_partial_sample = merge_params(params_feature_sample, params_final_layer_mean)
 
             ### Compute single-sample MC estimate of mean of logits
@@ -860,6 +867,7 @@ class TrainerModule:
                 params_prior_mean = jax.lax.stop_gradient(self.params_prior_mean)
             else:
                 params_prior_mean = jax.lax.stop_gradient(self.model.init(rng_key, inputs[0:1], train=True)["params"])
+                # params_prior_mean = jax.tree_map(lambda x, y: x + y, jax.lax.stop_gradient(params), jax.lax.stop_gradient(self.model.init(rng_key, inputs[0:1], train=True)["params"]))
 
             ### set parameter prior variance
             feature_prior_logvar = self.prior_feature_logvar
@@ -917,7 +925,7 @@ class TrainerModule:
 
             return kl
 
-        def calculate_function_prior_density(logits_reg, inputs, batch_stats, rng_key):
+        def calculate_function_prior_density(logits_reg, params, inputs, batch_stats, rng_key):
             ### set prior batch stats
             batch_stats_prior = jax.lax.stop_gradient(batch_stats)
 
@@ -925,7 +933,8 @@ class TrainerModule:
             if self.params_prior_mean is not None:
                 params_prior_mean = jax.lax.stop_gradient(self.params_prior_mean)
             else:
-                params_prior_mean = jax.lax.stop_gradient(self.model.init(rng_key, inputs[0:1], train=True)["params"])
+                # params_prior_mean = jax.lax.stop_gradient(self.model.init(rng_key, inputs[0:1], train=True)["params"])
+                params_prior_mean = jax.lax.stop_gradient(self.model.init(jax.random.PRNGKey(self.seed), inputs[0:1], train=True)["params"])
             params_feature_prior_mean, params_final_layer_prior_mean = split_params(params_prior_mean, "dense")
 
             ### initialize and split prior logvar parameters into feature and final-layer parameters
@@ -938,14 +947,14 @@ class TrainerModule:
             params_feature_prior_logvar = jax.tree_map(lambda x: x * 0 + feature_prior_logvar, params_feature_prior_logvar_init)
             params_final_layer_prior_logvar = jax.tree_map(lambda x: x * 0 + final_layer_prior_logvar, params_final_layer_prior_logvar_init)
 
-            params_feature_prior_sample = sample_parameters(params_feature_prior_mean, params_feature_prior_logvar, rng_key)
+            params_feature_prior_sample = sample_parameters(params_feature_prior_mean, params_feature_prior_logvar, self.stochastic, rng_key)
             # params_feature_prior_sample = params_feature_prior_mean
-            # params_feature_prior_sample = sample_parameters(jax.tree_map(lambda x: x * 0, params_feature_prior_mean), params_feature_prior_logvar, rng_key)  # use for non-init distribution feature variance
+            # params_feature_prior_sample = sample_parameters(jax.tree_map(lambda x: x * 0, params_feature_prior_mean), params_feature_prior_logvar, self.stochastic, rng_key)  # use for non-init distribution feature variance
 
             params_prior_sample = merge_params(params_feature_prior_sample, params_final_layer_prior_mean)
 
             ### feature covariance (mostly the same as Jacobian covariance (does not include bias term), up to numerical errors)
-            # _out = self.model.apply({'params': params_prior_sample, 'batch_stats': batch_stats},
+            # _out = self.model.apply({'params': params_prior_sample, 'batch_stats': batch_stats_prior},
             #                         inputs,
             #                         train=True,
             #                         feature=True,
@@ -961,7 +970,7 @@ class TrainerModule:
 
             ### Jacobian covariance (mostly the same as feature covariance (does include bias term), up to numerical errors)
             _out = self.model.apply(
-                {'params': params_prior_sample, 'batch_stats': batch_stats},
+                {'params': params_prior_sample, 'batch_stats': batch_stats_prior},
                 inputs,
                 train=True,
                 mutable=['batch_stats']
@@ -1016,7 +1025,7 @@ class TrainerModule:
                                         mutable=['batch_stats'])
                 out, _ = _out
                 logits_prior_mean = jax.lax.stop_gradient(out)
-            reg = 1 / (2 * self.objective_hparams["prior_var"]) * jnp.sum(jnp.square(logits_reg - logits_prior_mean))  # 1/(2  * ||f(inputs, params) - f(inputs, params_prior_mean)||^2
+            reg = 1 / (2 * self.prior_var) * jnp.sum(jnp.square(logits_reg - logits_prior_mean))  # 1/(2 * function_var) * ||f(inputs, params) - f(inputs, params_prior_mean)||^2
 
             return reg
 
@@ -1072,10 +1081,13 @@ class TrainerModule:
                 ))[0])
             return kl
 
-        def sample_parameters(params, params_logvar, rng_key):
-            eps = jax.tree_map(lambda x: random.normal(rng_key, x.shape), params_logvar)
-            params_std_sample = jax.tree_map(lambda x, y: x * jnp.exp(y) ** 0.5, eps, params_logvar)
-            params_sample = jax.tree_map(lambda x, y: x + y, params, params_std_sample)
+        def sample_parameters(params, params_logvar, stochastic, rng_key):
+            if stochastic:
+                eps = jax.tree_map(lambda x: random.normal(rng_key, x.shape), params_logvar)
+                params_std_sample = jax.tree_map(lambda x, y: x * jnp.exp(y) ** 0.5, eps, params_logvar)
+                params_sample = jax.tree_map(lambda x, y: x + y, params, params_std_sample)
+            else:
+                params_sample = params
             return params_sample
 
         def f_lin(params_dict, inputs, train, mutable):
@@ -1124,7 +1136,7 @@ class TrainerModule:
                 self.pred_fn = self.model.apply
 
             if self.objective_hparams["stochastic"]:
-                params = sample_parameters(params, params_logvar, rng_key)
+                params = sample_parameters(params, params_logvar, self.stochastic, rng_key)
 
             logits_list = []
             logits_reg_list = []
@@ -1184,7 +1196,8 @@ class TrainerModule:
             elif self.objective_hparams["reg_type"] == "function_kl":
                 reg = calculate_function_kl(params, params_logvar, inputs_context, batch_stats, rng_key)
             elif self.objective_hparams["reg_type"] == "function_prior":
-                reg = calculate_function_prior_density(logits_reg, inputs_context, batch_stats, rng_key)
+                # reg = calculate_parameter_function_prior_density(logits_reg, params, inputs_context, batch_stats, rng_key)
+                reg = calculate_function_prior_density(logits_reg, params, inputs_context, batch_stats, rng_key)
             elif self.objective_hparams["reg_type"] == "function_norm":
                 reg = calculate_function_norm(logits_reg, inputs_context, batch_stats)
             elif "parameter_norm" in self.objective_hparams["reg_type"]:
@@ -1205,65 +1218,84 @@ class TrainerModule:
             return loss, (acc, new_model_state)
 
         # @partial(jit, static_argnums=(4,))
-        def evaluation_predictions(params, params_logvar, rng_key, batch_stats, type):
+        def evaluation_predictions(params, params_logvar, rng_key, batch_stats, n_batches_eval, type):
             if type == "test":
                 _logits_test = []
                 _targets_test = []
-                for batch in test_loader:
+
+                for i, batch in enumerate(test_loader):
                     inputs_test, _targets = batch
-                    _logits_test.append(self.pred_fn({'params': params, 'batch_stats': batch_stats},
-                                                inputs_test, train=False, mutable=False))
+                    _logits_test_list = []
+                    for _ in range(mc_samples_eval):
+                        rng_key, _ = jax.random.split(rng_key)
+                        params = sample_parameters(params, params_logvar, self.stochastic, rng_key)
+                        _logits_test_list.append(self.pred_fn({'params': params, 'batch_stats': batch_stats},
+                                                    inputs_test, train=False, mutable=False))
+                    _logits_test.append(jnp.stack(_logits_test_list, axis=0))
                     _targets_test.append(_targets)
-                logits_test = jnp.concatenate(_logits_test, axis=0)
+                    if i == n_batches_eval:
+                        break
+                logits_test = jnp.concatenate(_logits_test, axis=1)
                 targets_test = jnp.concatenate(_targets_test, axis=0)
 
                 ret = [logits_test, targets_test]
 
             elif type == "context":
-                n_batches_eval = 10
                 _logits_context = []
                 for i, batch in enumerate(context_loader):
                     inputs_context, _ = batch
-                    _logits_context.append(self.pred_fn({'params': params, 'batch_stats': batch_stats},
-                                                inputs_context, train=False, mutable=False))
-                    if i == n_batches_eval:
+                    _logits_context_list = []
+                    for _ in range(mc_samples_eval):
+                        rng_key, _ = jax.random.split(rng_key)
+                        params = sample_parameters(params, params_logvar, self.stochastic, rng_key)
+                        _logits_context_list.append(self.pred_fn({'params': params, 'batch_stats': batch_stats},
+                                                    inputs_context, train=False, mutable=False))
+                    _logits_context.append(jnp.stack(_logits_context_list, axis=0))
+                    if i == self.n_batches_eval_context:
                         break
-                logits_context = jnp.concatenate(_logits_context, axis=0)
+                logits_context = jnp.concatenate(_logits_context, axis=1)
 
                 ret = [logits_context, None]
 
             elif type == "ood":
                 _logits_ood = []
-                for batch in ood_loader:
+                for i, batch in enumerate(ood_loader):
                     inputs_ood, _ = batch
-                    _logits_ood.append(self.pred_fn({'params': params, 'batch_stats': batch_stats},
-                                                        inputs_ood, train=False, mutable=False))
-                logits_ood = jnp.concatenate(_logits_ood, axis=0)
+                    _logits_ood_list = []
+                    for _ in range(mc_samples_eval):
+                        rng_key, _ = jax.random.split(rng_key)
+                        params = sample_parameters(params, params_logvar, self.stochastic, rng_key)
+                        _logits_ood_list.append(self.pred_fn({'params': params, 'batch_stats': batch_stats},
+                                                            inputs_ood, train=False, mutable=False))
+                    _logits_ood.append(jnp.stack(_logits_ood_list, axis=0))
+                    if i == n_batches_eval:
+                        break
+                logits_ood = jnp.concatenate(_logits_ood, axis=1)
 
                 ret = [logits_ood, None]
 
             return ret
 
-        def calculate_metrics(params, params_logvar, rng_key, batch_stats):
+        def calculate_metrics(params, params_logvar, rng_key, batch_stats, n_batches_eval):
             if self.objective_hparams["stochastic"]:
-                params = sample_parameters(params, params_logvar, rng_key)
+                params = sample_parameters(params, params_logvar, self.stochastic, rng_key)
 
-            logits_test, targets_test = self.evaluation_predictions(params, params_logvar, rng_key, batch_stats, "test")
-            logits_context, _ = self.evaluation_predictions(params, params_logvar, rng_key, batch_stats, "context")
-            logits_ood, _ = self.evaluation_predictions(params, params_logvar, rng_key, batch_stats, "ood")
+            logits_test, targets_test = self.evaluation_predictions(params, params_logvar, rng_key, batch_stats, n_batches_eval, "test")
+            logits_context, _ = self.evaluation_predictions(params, params_logvar, rng_key, batch_stats, n_batches_eval, "context")
+            logits_ood, _ = self.evaluation_predictions(params, params_logvar, rng_key, batch_stats, n_batches_eval, "ood")
 
             num_classes = logits_test.shape[-1]
 
-            acc_test = 100 * np.array(np.mean(logits_test.argmax(axis=-1) == targets_test))
-            acc_sel_test = selective_accuracy(jax.nn.softmax(logits_test, axis=-1), targets_test)
-            nll_test = jax.device_get(categorical_nll(logits_test, targets_test).mean())
-            ece_test = 100 * calibration(jax.nn.one_hot(targets_test, num_classes), jax.nn.softmax(logits_test, axis=-1))[0]
+            acc_test = 100 * np.array(np.mean(logits_test.mean(0).argmax(axis=-1) == targets_test))
+            acc_sel_test = selective_accuracy(jax.nn.softmax(logits_test, axis=-1).mean(0), targets_test)
+            nll_test = jax.device_get(categorical_nll(logits_test.mean(0), targets_test).mean())  # TODO: fix .mean(0) for BNNs
+            ece_test = 100 * calibration(jax.nn.one_hot(targets_test, num_classes), jax.nn.softmax(logits_test, axis=-1).mean(0))[0]
 
-            ood_auroc_entropy = 100 * auroc_logits(logits_test[None, :, :], logits_ood[None, :, :], score="entropy", rng_key=rng_key)
+            ood_auroc_entropy = 100 * auroc_logits(logits_test, logits_ood, score="entropy", rng_key=rng_key)
 
-            predictive_entropy_test = jax.device_get(categorical_entropy(jax.nn.softmax(logits_test, -1)).mean(0))
-            predictive_entropy_context = jax.device_get(categorical_entropy(jax.nn.softmax(logits_context, -1)).mean(0))
-            predictive_entropy_ood = jax.device_get(categorical_entropy(jax.nn.softmax(logits_ood, -1)).mean(0))
+            predictive_entropy_test = jax.device_get(categorical_entropy(jax.nn.softmax(logits_test, -1).mean(0)).mean(0))
+            predictive_entropy_context = jax.device_get(categorical_entropy(jax.nn.softmax(logits_context, -1).mean(0)).mean(0))
+            predictive_entropy_ood = jax.device_get(categorical_entropy(jax.nn.softmax(logits_ood, -1).mean(0)).mean(0))
 
             self.logger["acc_test"].append(acc_test)
             self.logger["acc_sel_test"].append(acc_sel_test)
@@ -1284,8 +1316,8 @@ class TrainerModule:
             state = state.apply_gradients(grads=freeze({"params": grads, "params_logvar": grads_logvar}), batch_stats=new_model_state['batch_stats'])
             return state, loss, acc
 
-        def eval_step(state, rng_key):
-            calculate_metrics(state.params["params"], state.params["params_logvar"], rng_key, state.batch_stats)
+        def eval_step(state, rng_key, n_batches_eval):
+            calculate_metrics(state.params["params"], state.params["params_logvar"], rng_key, state.batch_stats, n_batches_eval)
 
         self.train_step = jax.jit(train_step)
         self.evaluation_predictions = evaluation_predictions
@@ -1302,6 +1334,9 @@ class TrainerModule:
 
         if self.stochastic:
             init_params_logvar = jax.tree_map(lambda x: x + self.init_logvar, variables_logvar['params'])
+            init_params_feature_logvar, init_params_final_layer_logvar = split_params(init_params_logvar, "dense")
+            init_params_final_layer_logvar = jax.tree_map(lambda x: x * 0 - 50, init_params_final_layer_logvar)
+            init_params_logvar = merge_params(init_params_feature_logvar, init_params_final_layer_logvar)
         else:
             init_params_logvar = None
 
@@ -1329,9 +1364,11 @@ class TrainerModule:
             alpha=self.optimizer_hparams.pop("alpha"),
         )
         transf = []
+        # transf = [optax.clip(1.0)]
         if opt_class == optax.sgd and 'weight_decay' in self.optimizer_hparams:  # wd is integrated in adamw
             transf.append(optax.add_decayed_weights(self.optimizer_hparams.pop('weight_decay')))
         optimizer = optax.chain(
+            *transf,
             opt_class(lr_schedule, **self.optimizer_hparams)
         )
 
@@ -1350,7 +1387,7 @@ class TrainerModule:
             epoch_idx = epoch + 1
             self.train_epoch(train_loader, context_loader, epoch=epoch_idx, rng_key=rng_key)
             if epoch_idx % log_frequency == 0:
-                self.eval_model(rng_key)
+                self.eval_model(rng_key, self.n_batches_eval)
                 # eval_acc = self.eval_model(val_loader, rng_key)
                 if self.logger['acc_test'][-1] >= best_eval:
                     self.logger['acc_test_best'].append(self.logger['acc_test'][-1])
@@ -1389,8 +1426,8 @@ class TrainerModule:
             avg_val = np.stack(jax.device_get(metrics[key])).mean()
             self.logger[f"{key}_train"].append(avg_val)
 
-    def eval_model(self, rng_key):
-        self.eval_step(self.state, rng_key)
+    def eval_model(self, rng_key, n_batches_eval):
+        self.eval_step(self.state, rng_key, n_batches_eval)
 
     def save_model(self, step=0, best=False):
         if best:
@@ -1494,7 +1531,7 @@ def train_classifier(*args, num_epochs, rng_key, **kwargs):
         trainer.logger['acc_train'][-1] = 0
 
     # val_acc = trainer.eval_model(val_loader, rng_key)
-    trainer.eval_model(rng_key)
+    trainer.eval_model(rng_key, trainer.n_batches_eval_final)
     # print(f"\nValidation Accuracy: {val_acc*100:.2f}")
     print(f"Train Accuracy: {trainer.logger['acc_train'][-1]:.2f}  |  Test Accuracy: {trainer.logger['acc_test'][-1]:.2f}  |  Selective Accuracy: {trainer.logger['acc_sel_test'][-1]:.2f}  |  NLL: {trainer.logger['nll_test'][-1]:.3f}  |  Test ECE: {trainer.logger['ece_test'][-1]:.2f}  |  OOD AUROC: {trainer.logger['ood_auroc_entropy'][-1]:.2f}  |  Entropy Test: {trainer.logger['predictive_entropy_test'][-1]:.2f}  |  Entropy Context: {trainer.logger['predictive_entropy_context'][-1]:.2f}  |  Entropy OOD: {trainer.logger['predictive_entropy_ood'][-1]:.2f}")
 
@@ -1505,7 +1542,7 @@ def train_classifier(*args, num_epochs, rng_key, **kwargs):
 
 
 # conv_kernel_init = lecun_normal()  # flax default
-conv_kernel_init = nn.initializers.variance_scaling(1/10, mode='fan_in', distribution='uniform')
+conv_kernel_init = nn.initializers.variance_scaling(1/20, mode='fan_in', distribution='uniform')
 # conv_kernel_init = nn.initializers.variance_scaling(1/20, mode='fan_in', distribution='normal')
 # conv_kernel_init = nn.initializers.variance_scaling(2.0, mode='fan_out', distribution='normal')
 
@@ -1543,6 +1580,26 @@ class CNN(nn.Module):
         x = nn.max_pool(x, window_shape=(2, 2), strides=(2, 2), padding="VALID")
         x = x.reshape((x.shape[0], -1))  # flatten
         x = nn.Dense(features=256, dtype=self.dtype)(x)
+        x = nn.relu(x)
+        x = nn.Dense(features=num_classes, dtype=self.dtype)(x)
+
+        return x
+
+
+class MLP(nn.Module):
+    """A simple MLP model."""
+    num_classes : int
+    act_fn : callable
+    block_class : None
+    num_blocks : None
+    c_hidden : None
+    dtype: str='float32'
+
+    @nn.compact
+    def __call__(self, x, train=True):
+        x = nn.Dense(features=100, dtype=self.dtype)(x)
+        x = nn.relu(x)
+        x = nn.Dense(features=100, dtype=self.dtype)(x)
         x = nn.relu(x)
         x = nn.Dense(features=num_classes, dtype=self.dtype)(x)
 
