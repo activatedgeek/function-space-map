@@ -14,6 +14,7 @@ from .factory import \
     get_cifar10, \
     get_cifar100
 from .third_party.aptos import get_aptos_orig
+from .third_party.cassava import get_cassava_orig
 
 
 _DATASET_CFG = {
@@ -61,7 +62,12 @@ _DATASET_CFG = {
         'n_classes': 5,
         'get_fn': get_aptos_orig,
         'normalize': [(0.485, 0.456, 0.406), (0.229, 0.224, 0.225)],
-    }
+    },
+    'cassava': {
+        'n_classes': 5,
+        'get_fn': get_cassava_orig,
+        'normalize': [(0.485, 0.456, 0.406), (0.229, 0.224, 0.225)],
+    },
 }
 
 
