@@ -7,7 +7,7 @@ from torch.utils.data import Subset
 from timm.data import create_dataset
 import torchvision.transforms as transforms
 
-from .utils.data import get_data_dir, train_test_split, LabelNoiseDataset
+from .utils import get_data_dir, train_test_split, LabelNoiseDataset
 
 
 ## Convert from CxHxW to HxWxC for Flax.
