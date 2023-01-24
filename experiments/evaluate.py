@@ -1,3 +1,4 @@
+import logging
 from torch.utils.data import DataLoader
 
 from fspace.utils.logging import set_logging, finish_logging, wandb
@@ -31,13 +32,16 @@ def main(seed=42, log_dir=None, data_dir=None,
                                           normalize=get_dataset_normalization(dataset))
         ood_test_loader = DataLoader(ood_test_data, batch_size=batch_size, num_workers=num_workers)
 
-    full_eval_model(model_name, train_data.n_classes, log_dir,
+    full_eval_model(model_name, train_data.n_classes, ckpt_path,
                     train_loader, test_loader, val_loader=val_loader, ood_loader=ood_test_loader,
                     ckpt_prefix='checkpoint_', log_prefix='s/')
 
-    full_eval_model(model_name, train_data.n_classes, log_dir,
-                    train_loader, test_loader, val_loader=val_loader, ood_loader=ood_test_loader,
-                    ckpt_prefix='best_checkpoint_', log_prefix='s/best/')
+    try:
+        full_eval_model(model_name, train_data.n_classes, ckpt_path,
+                        train_loader, test_loader, val_loader=val_loader, ood_loader=ood_test_loader,
+                        ckpt_prefix='best_checkpoint_', log_prefix='s/best/')
+    except TypeError:
+        logging.warning('Skipping best checkpoint evaluation.')
 
 
 def entrypoint(log_dir=None, **kwargs):
