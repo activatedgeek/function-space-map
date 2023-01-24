@@ -72,4 +72,4 @@ def get_cassava_orig(root=None, n_classes=5, img_size=256, seed=42, val_size=.2,
                     transforms.Normalize(*normalize)])
     trainset = LeafDataset(df=train_split_df, data_path=train_path, transform=transform_train)
 
-    return trainset, testset
+    return trainset, None, testset
