@@ -19,4 +19,4 @@ class TinyMLP(nn.Module):
     return x
 
 
-MLP100 = partial(TinyMLP, hidden_size=100)
+MLP200 = partial(TinyMLP, hidden_size=200)
