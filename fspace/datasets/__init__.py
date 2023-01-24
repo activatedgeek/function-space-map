@@ -49,11 +49,6 @@ _DATASET_CFG = {
         'get_fn': partial(get_cifar10, v1=True),
         'normalize': [(.4914, .4822, .4465), (.2023, .1994, .2010)],
     },
-    'cifar10c': {
-        'n_classes': 10,
-        'get_fn': partial(get_cifar10, corrupted=True),
-        'normalize': [(.4914, .4822, .4465), (.2023, .1994, .2010)],
-    },
     'cifar100': {
         'n_classes': 100,
         'get_fn': get_cifar100,

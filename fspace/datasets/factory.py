@@ -77,9 +77,8 @@ def get_kmnist(root=None, seed=42, val_size=1/6, normalize=None, **_):
     return train_data, val_data, test_data
 
 
-
 def get_cifar10(root=None, seed=42, val_size=0., normalize=None, augment=True,
-                v1=False, corrupted=False, batch_size=128, **_):
+                v1=False, corr_config=None, batch_size=128, **_):
     _TEST_TRANSFORM = [
         transforms.ToTensor(),
         transforms.Normalize(*normalize),
@@ -100,8 +99,8 @@ def get_cifar10(root=None, seed=42, val_size=0., normalize=None, augment=True,
         test_data = create_dataset('tfds/cifar10_1', root=root, split='test',
                                     is_training=True, batch_size=batch_size,
                                     transform=transforms.Compose(_TEST_TRANSFORM), download=True)
-    elif corrupted:
-        test_data = create_dataset('tfds/cifar10_corrupted', root=root, split='test',
+    elif corr_config is not None:
+        test_data = create_dataset(f'tfds/cifar10_corrupted/{corr_config}', root=root, split='test',
                                     is_training=True, batch_size=batch_size,
                                     transform=transforms.Compose(_TEST_TRANSFORM), download=True)
     else:

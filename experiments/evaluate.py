@@ -8,7 +8,7 @@ from fspace.scripts.evaluate import full_eval_model
 
 def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
-         dataset=None, ood_dataset=None,
+         dataset=None, ood_dataset=None, corr_config=None,
          batch_size=512, num_workers=4):
     wandb.config.update({
         'log_dir': log_dir,
@@ -16,11 +16,12 @@ def main(seed=42, log_dir=None, data_dir=None,
         'model_name': model_name,
         'ckpt_path': ckpt_path,
         'dataset': dataset,
+        'corr_config': corr_config,  # CIFAR-10 corruption config name.
         'ood_dataset': ood_dataset,
         'batch_size': batch_size,
     })
 
-    train_data, val_data, test_data = get_dataset(dataset, root=data_dir, seed=seed)
+    train_data, val_data, test_data = get_dataset(dataset, root=data_dir, seed=seed, corr_config=corr_config)
     train_loader = DataLoader(train_data, batch_size=batch_size, num_workers=num_workers,
                               shuffle=True)
     val_loader = DataLoader(val_data, batch_size=batch_size, num_workers=num_workers) if val_data is not None else None
