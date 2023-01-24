@@ -23,3 +23,12 @@ And finally, run
 ```
 pip install -e .
 ```
+
+### Manual Changes
+
+To load CIFAR-10 Corrupted configurations from TFDS, the following path is necessary in the `timm` library [parser_factory.py](https://github.com/rwightman/pytorch-image-models/blob/v0.6.7/timm/data/parsers/parser_factory.py#L9):
+
+```diff
+- name = name.split('/', 2)
++ name = name.split('/', 1)
+```
