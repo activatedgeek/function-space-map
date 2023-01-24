@@ -13,14 +13,19 @@ from .factory import \
     get_kmnist, \
     get_cifar10, \
     get_cifar100
+from .two_moons import get_twomoons
 from .third_party.aptos import get_aptos_orig
 from .third_party.cassava import get_cassava_orig
 from .third_party.melanoma import get_melanoma_orig
 
 
 _DATASET_CFG = {
+    'twomoons': {
+        'n_classes': 2,
+        'get_fn': get_twomoons,
+    },
     'mnist': {
-        'num_classes': 10,
+        'n_classes': 10,
         'get_fn': get_mnist,
         'normalize': [(0.1307,), (0.3081,)],
     },

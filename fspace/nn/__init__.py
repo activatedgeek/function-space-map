@@ -3,11 +3,15 @@ import jax
 from flax.training import checkpoints
 from flax.core.frozen_dict import freeze
 
+from .mlp import MLP100
 from .cnn import SmallCNN, TinyCNN
 from .third_party.resnet import ResNet9, ResNet18, ResNet50
 
 
 __MODEL_CFG = {
+    'mlp100': {
+        'model_cls': MLP100,
+    },
     'resnet9': {
         'model_cls': ResNet9,
     },
