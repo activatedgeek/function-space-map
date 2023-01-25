@@ -718,6 +718,15 @@ elif dataset in ['aptos', 'cassava', 'melanoma']:
 
     num_classes = train_dataset.n_classes
     training_dataset_size = len(train_dataset)
+
+    ## NOTE: dummy variable to avoid breaking changes. ignore ood results for these datasets.
+    ood_loader = data.DataLoader(test_dataset,
+                                 batch_size=128,
+                                 shuffle=False,
+                                 drop_last=False,
+                                 collate_fn=numpy_collate,
+                                 num_workers=4,
+                                 persistent_workers=True)
 else:
     raise ValueError("Dataset not found.")
 
