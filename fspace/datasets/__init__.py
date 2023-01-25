@@ -23,6 +23,9 @@ _DATASET_CFG = {
     'twomoons': {
         'n_classes': 2,
         'get_fn': get_twomoons,
+        'random_state': 137,
+        'noise': 5e-2,
+        'normalize': [[[0.49983146, 0.24929603]], [[0.87234487, 0.48621055]]], ## Update stats if random state and noise updated.
     },
     'mnist': {
         'n_classes': 10,

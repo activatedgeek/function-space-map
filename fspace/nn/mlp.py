@@ -9,12 +9,12 @@ class TinyMLP(nn.Module):
   @nn.compact
   def __call__(self, x, **_):
     x = nn.Dense(self.hidden_size)(x)
-    x = nn.relu(x)
+    x = nn.tanh(x)
     x = nn.Dense(self.hidden_size)(x)
-    x = nn.relu(x)
 
     self.sow('intermediates', 'features', x)
 
+    x = nn.tanh(x)
     x = nn.Dense(self.num_classes)(x)
     return x
 
