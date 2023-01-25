@@ -40,8 +40,8 @@ from flax.core.frozen_dict import freeze
 
 ## JAX addons
 import optax
-# from flaxmodels.resnet import ops
-# from flaxmodels import utils
+from flaxmodels.resnet import ops
+from flaxmodels import utils
 
 ## Tensorflow
 import tensorflow as tf
@@ -709,6 +709,12 @@ elif dataset == 'two-moons':
     context_dataset = TwoMoons(x_train.shape[0], x_train, y_train)
     val_dataset = TwoMoons(x_train.shape[0], x_train, y_train)
     test_dataset = TwoMoons(x_train.shape[0], x_train, y_train)
+elif dataset in ['aptos', 'cassava', 'melanoma']:
+    from fspace.datasets import get_dataset
+    train_dataset, _, test_dataset = get_dataset(
+        dataset, root=os.environ.get('DATADIR'), seed=seed)
+    validation_dataset = test_dataset
+    context_set = train_dataset
 else:
     raise ValueError("Dataset not found.")
 

@@ -20,3 +20,4 @@ flax<0.7
 optax<0.2
 distrax<0.2
 blackjax<1.0
+flaxmodels<0.2
