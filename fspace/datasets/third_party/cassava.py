@@ -36,7 +36,7 @@ class LeafDataset(torch.utils.data.Dataset):
         return image, label
 
 
-def get_cassava_orig(root=None, n_classes=5, img_size=256, seed=42, val_size=.2, normalize=None, **_):
+def get_cassava_orig(root=None, n_classes=5, img_size=256, seed=42, val_size=.2, normalize=None, numpy=False, **_):
     metadata = False
     root = Path(root) / 'cassava'
     train_path = os.path.join(root, 'train_images')
@@ -61,7 +61,8 @@ def get_cassava_orig(root=None, n_classes=5, img_size=256, seed=42, val_size=.2,
                     transforms.Resize(img_size),
                     transforms.CenterCrop(img_size),
                     transforms.ToTensor(),
-                    transforms.Normalize(*normalize)])
+                    transforms.Normalize(*normalize),
+                    transforms.Lambda(lambda x: x.numpy() if numpy else x)])
     testset = LeafDataset(df=validation_split_df, data_path=train_path, transform=transform)
 
     transform_train = transforms.Compose([
@@ -69,7 +70,8 @@ def get_cassava_orig(root=None, n_classes=5, img_size=256, seed=42, val_size=.2,
                     transforms.RandomHorizontalFlip(),
                     transforms.RandomVerticalFlip(),
                     transforms.ToTensor(),
-                    transforms.Normalize(*normalize)])
+                    transforms.Normalize(*normalize),
+                    transforms.Lambda(lambda x: x.numpy() if numpy else x)])
     trainset = LeafDataset(df=train_split_df, data_path=train_path, transform=transform_train)
 
     return trainset, None, testset

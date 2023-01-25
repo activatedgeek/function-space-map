@@ -712,9 +712,12 @@ elif dataset == 'two-moons':
 elif dataset in ['aptos', 'cassava', 'melanoma']:
     from fspace.datasets import get_dataset
     train_dataset, _, test_dataset = get_dataset(
-        dataset, root=os.environ.get('DATADIR'), seed=seed)
+        dataset, root=os.environ.get('DATADIR'), seed=seed, numpy=True)
     validation_dataset = test_dataset
     context_set = train_dataset
+
+    num_classes = train_dataset.n_classes
+    training_dataset_size = len(train_dataset)
 else:
     raise ValueError("Dataset not found.")
 

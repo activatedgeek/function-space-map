@@ -34,7 +34,7 @@ class AptosDataset(torch.utils.data.Dataset):
         return image, label
 
 
-def get_aptos_orig(root=None, n_classes=5, img_size=256, seed=42, val_size=.2, normalize=None, **_):
+def get_aptos_orig(root=None, n_classes=5, img_size=256, seed=42, val_size=.2, normalize=None, numpy=False, **_):
     root = (Path(root) / 'retinopathy' / 'aptos' / 'manual')
 
     image_key = 'id_code'
@@ -61,14 +61,16 @@ def get_aptos_orig(root=None, n_classes=5, img_size=256, seed=42, val_size=.2, n
                     transforms.Resize(img_size),
                     transforms.CenterCrop(img_size),
                     transforms.ToTensor(),
-                    transforms.Normalize(*normalize)])
+                    transforms.Normalize(*normalize),
+                    transforms.Lambda(lambda x: x.numpy() if numpy else x)])
     testset = AptosDataset(df=validation_split_df, data_path=train_path, transform=transform)
 
     transform_train = transforms.Compose([
                     transforms.RandomResizedCrop(img_size, scale=(0.65, 1.0)),
                     transforms.RandomHorizontalFlip(),
                     transforms.ToTensor(),
-                    transforms.Normalize(*normalize)])
+                    transforms.Normalize(*normalize),
+                    transforms.Lambda(lambda x: x.numpy() if numpy else x)])
     trainset = AptosDataset(df=train_split_df, data_path=train_path, transform=transform_train)
 
     return trainset, None, testset

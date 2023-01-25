@@ -54,14 +54,15 @@ class MelanomaDataset(torch.utils.data.Dataset):
         label = torch.tensor(self.labels[idx]).long()
         return image, label
 
-def get_melanoma_orig(root=None, img_size=256, normalize=None, **_):
+def get_melanoma_orig(root=None, img_size=256, normalize=None, numpy=False, **_):
     metadata = False
 
     transform = transforms.Compose([
                     transforms.Resize(img_size),
                     transforms.CenterCrop(img_size),
                     transforms.ToTensor(),
-                    transforms.Normalize(*normalize)])
+                    transforms.Normalize(*normalize),
+                    transforms.Lambda(lambda x: x.numpy() if numpy else x)])
     testset = MelanomaDataset(root, train=False, transform=transform, metadata=metadata)
 
     transform_train = transforms.Compose([
@@ -69,7 +70,8 @@ def get_melanoma_orig(root=None, img_size=256, normalize=None, **_):
                     transforms.RandomHorizontalFlip(),
                     transforms.RandomVerticalFlip(),
                     transforms.ToTensor(),
-                    transforms.Normalize(*normalize)])
+                    transforms.Normalize(*normalize),
+                    transforms.Lambda(lambda x: x.numpy() if numpy else x)])
     trainset = MelanomaDataset(root, transform=transform_train, metadata=metadata)
 
     return trainset, None, testset
