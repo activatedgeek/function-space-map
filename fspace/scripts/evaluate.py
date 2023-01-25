@@ -56,6 +56,9 @@ def full_eval_model(model_name, num_classes, ckpt_path,
     _, model, params, other_vars = create_model(None, model_name, None, num_classes=num_classes,
                                                 ckpt_path=ckpt_path, ckpt_prefix=ckpt_prefix)
 
+    ## FIXME: temp fix remove extra vars.
+    # other_vars, _ = other_vars.pop('params_logvar')
+
     @jax.jit
     def f_model(X):
         return model.apply({ 'params': params, **other_vars}, X, mutable=False, train=False)

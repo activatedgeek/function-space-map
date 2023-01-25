@@ -11,10 +11,10 @@ class TinyMLP(nn.Module):
     x = nn.Dense(self.hidden_size)(x)
     x = nn.tanh(x)
     x = nn.Dense(self.hidden_size)(x)
+    x = nn.tanh(x)
 
     self.sow('intermediates', 'features', x)
 
-    x = nn.tanh(x)
     x = nn.Dense(self.num_classes)(x)
     return x
 

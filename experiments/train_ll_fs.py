@@ -34,7 +34,8 @@ def train_step_fn(prior_params, state, b_X, b_Y, b_X_ctx, f_prior_std, jitter=1e
                                                    mutable=['batch_stats', 'intermediates'], train=True)[1]['intermediates']['features'][0])
 
         f_h_cov = jnp.matmul(h_X * f_prior_std**2, h_X.T)
-        f_h_cov = f_h_cov + f_prior_std**2 * jnp.ones_like(f_h_cov) + jitter * jnp.eye(f_h_cov.shape[0])
+        ## TODO: large jitter.
+        f_h_cov = f_h_cov + f_prior_std**2 * jnp.ones_like(f_h_cov) + f_prior_std**2 * jnp.eye(f_h_cov.shape[0])
         f_dist = distrax.MultivariateNormalFullCovariance(
             loc=jnp.zeros(f_h_cov.shape[0]), covariance_matrix=f_h_cov)
 
