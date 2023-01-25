@@ -62,6 +62,7 @@ def get_cassava_orig(root=None, n_classes=5, img_size=256, seed=42, val_size=.2,
                     transforms.CenterCrop(img_size),
                     transforms.ToTensor(),
                     transforms.Normalize(*normalize),
+                    transforms.Lambda(lambda img: img.permute(1, 2, 0)),
                     transforms.Lambda(lambda x: x.numpy() if numpy else x)])
     testset = LeafDataset(df=validation_split_df, data_path=train_path, transform=transform)
 
@@ -71,6 +72,7 @@ def get_cassava_orig(root=None, n_classes=5, img_size=256, seed=42, val_size=.2,
                     transforms.RandomVerticalFlip(),
                     transforms.ToTensor(),
                     transforms.Normalize(*normalize),
+                    transforms.Lambda(lambda img: img.permute(1, 2, 0)),
                     transforms.Lambda(lambda x: x.numpy() if numpy else x)])
     trainset = LeafDataset(df=train_split_df, data_path=train_path, transform=transform_train)
 

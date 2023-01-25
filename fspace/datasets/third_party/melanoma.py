@@ -62,6 +62,7 @@ def get_melanoma_orig(root=None, img_size=256, normalize=None, numpy=False, **_)
                     transforms.CenterCrop(img_size),
                     transforms.ToTensor(),
                     transforms.Normalize(*normalize),
+                    transforms.Lambda(lambda img: img.permute(1, 2, 0)),
                     transforms.Lambda(lambda x: x.numpy() if numpy else x)])
     testset = MelanomaDataset(root, train=False, transform=transform, metadata=metadata)
 
@@ -71,6 +72,7 @@ def get_melanoma_orig(root=None, img_size=256, normalize=None, numpy=False, **_)
                     transforms.RandomVerticalFlip(),
                     transforms.ToTensor(),
                     transforms.Normalize(*normalize),
+                    transforms.Lambda(lambda img: img.permute(1, 2, 0)),
                     transforms.Lambda(lambda x: x.numpy() if numpy else x)])
     trainset = MelanomaDataset(root, transform=transform_train, metadata=metadata)
 
