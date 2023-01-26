@@ -22,8 +22,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     })
 
     train_data, val_data, test_data = get_dataset(dataset, root=data_dir, seed=seed, corr_config=corr_config)
-    train_loader = DataLoader(train_data, batch_size=batch_size, num_workers=num_workers,
-                              shuffle=True)
+    train_loader = DataLoader(train_data, batch_size=batch_size, num_workers=num_workers)
     val_loader = DataLoader(val_data, batch_size=batch_size, num_workers=num_workers) if val_data is not None else None
     test_loader = DataLoader(test_data, batch_size=batch_size, num_workers=num_workers)
 

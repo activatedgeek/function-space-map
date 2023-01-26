@@ -44,4 +44,11 @@ def create_model(rng, model_name, sample_input, num_classes=10,
         init_vars = model.init(model_init_rng, sample_input)
     other_vars, params = init_vars.pop('params')
 
+    ## FIXME: tmp. fix for compatibility
+    try:
+        other_vars, _ = other_vars.pop('params_logvar')
+        logging.warning('Removed "params_logvar".')
+    except KeyError:
+        pass
+
     return rng, model, params, other_vars

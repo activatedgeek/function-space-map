@@ -42,11 +42,6 @@ def main(log_dir=None, model_name=None, dataset=None, corr_config=None, ckpt_pat
     _, model, params, other_vars = create_model(None, model_name, None, num_classes=10,
                                                 ckpt_path=ckpt_path, ckpt_prefix='checkpoint_')
 
-    try:
-        other_vars, _ = other_vars.pop('params_logvar')
-    except KeyError:
-        logging.warning('Ignoring extra vars pop.')
-
     @jax.jit
     def f_model(X):
         return model.apply({ 'params': params, **other_vars }, X, mutable=False, train=False)
