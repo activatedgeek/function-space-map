@@ -5,41 +5,25 @@ import jax.numpy as jnp
 
 from fspace.nn import create_model
 from fspace.utils.metrics import \
-    accuracy, selective_accuracy_auc, categorical_entropy, categorical_nll, calibration, entropy_ood_auc
+    accuracy, \
+    selective_accuracy_auc, \
+    categorical_entropy, \
+    categorical_nll_with_p, \
+    calibration, \
+    entropy_ood_auc
 
 
-def eval_logits(f, loader):
-    all_logits = []
-    all_Y = []
+def eval_classifier(all_p, all_Y):
+    acc = accuracy(all_p, all_Y)
 
-    for X, Y in tqdm(loader, leave=False):
-        X, Y = X.numpy(), Y.numpy()
-
-        all_logits.append(f(X))
-        all_Y.append(Y)
-
-    all_logits = jnp.concatenate(all_logits)
-    all_Y = jnp.concatenate(all_Y)
-
-    return all_logits, all_Y
-
-
-def eval_classifier(all_logits, all_Y):
-    n_classes = all_logits.shape[-1]
-
-    all_p = jax.nn.softmax(all_logits, axis=-1)
-
-    acc = accuracy(all_logits, all_Y)
     sel_acc = selective_accuracy_auc(all_p, all_Y)
 
-    all_nll = categorical_nll(all_logits, all_Y)
-    avg_nll = jnp.mean(all_nll, axis=0)
+    avg_nll = jnp.mean(categorical_nll_with_p(all_p, all_Y), axis=0)
 
-    all_ent = categorical_entropy(all_p)
-    avg_ent = jnp.mean(all_ent, axis=0)
+    avg_ent = jnp.mean(categorical_entropy(all_p), axis=0)
 
     ## TODO: JIT this?
-    ece, _ = calibration(jax.nn.one_hot(all_Y, n_classes), all_p, num_bins=10)
+    ece, _ = calibration(jax.nn.one_hot(all_Y, all_p.shape[-1]), all_p, num_bins=10)
 
     return {
         'acc': acc.item(),
@@ -56,34 +40,46 @@ def full_eval_model(model_name, num_classes, ckpt_path,
     _, model, params, other_vars = create_model(None, model_name, None, num_classes=num_classes,
                                                 ckpt_path=ckpt_path, ckpt_prefix=ckpt_prefix)
 
-    try:
-        other_vars, _ = other_vars.pop('params_logvar')
-    except KeyError:
-        logging.warning('Ignoring extra vars pop.')
+    def compute_model_p(loader):
+        @jax.jit
+        def model_fn(X):
+            return model.apply({ 'params': params, **other_vars }, X, mutable=False, train=False)
 
-    @jax.jit
-    def f_model(X):
-        return model.apply({ 'params': params, **other_vars }, X, mutable=False, train=False)
+        all_logits = []
+        all_Y = []
+
+        for X, Y in tqdm(loader, leave=False):
+            X, Y = X.numpy(), Y.numpy()
+
+            all_logits.append(model_fn(X))
+            all_Y.append(Y)
+
+        all_p = jax.nn.softmax(jnp.concatenate(all_logits), axis=-1)
+        all_Y = jnp.concatenate(all_Y)
+
+        return all_p, all_Y
 
     logging.info(f'Evaluating train metrics...')
-    train_metrics = eval_classifier(*eval_logits(f_model, train_loader))
+    train_p, train_Y = compute_model_p(train_loader)
+    train_metrics = eval_classifier(train_p, train_Y)
     logging.info(train_metrics, extra=dict(metrics=True, prefix=f'{log_prefix}train'))
 
     logging.info(f'Evaluating test metrics...')
-    test_logits, test_Y = eval_logits(f_model, test_loader)
-    test_metrics = eval_classifier(test_logits, test_Y)
+    test_p, test_Y = compute_model_p(test_loader)
+    test_metrics = eval_classifier(test_p, test_Y)
     logging.info(test_metrics, extra=dict(metrics=True, prefix=f'{log_prefix}test'))
 
     if val_loader is not None:
         logging.info(f'Evaluating validation metrics...')
-        val_metrics = eval_classifier(*eval_logits(f_model, val_loader))
+        val_p, val_Y = compute_model_p(val_loader)
+        val_metrics = eval_classifier(val_p, val_Y)
     else:
         val_metrics = test_metrics
     logging.info(val_metrics, extra=dict(metrics=True, prefix=f'{log_prefix}val'))
 
     if ood_loader is not None:
-        ood_test_logits, ood_test_Y = eval_logits(f_model, ood_loader)
-        ood_test_metrics = eval_classifier(ood_test_logits, ood_test_Y)
-        ood_auc = entropy_ood_auc(test_logits, ood_test_logits)
+        ood_p, ood_Y = compute_model_p(ood_loader)
+        ood_test_metrics = eval_classifier(ood_p, ood_Y)
+        ood_auc = entropy_ood_auc(test_p, ood_p)
 
         logging.info({ **ood_test_metrics, 'auc': ood_auc }, extra=dict(metrics=True, prefix=f'{log_prefix}ood_test'))

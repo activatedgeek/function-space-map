@@ -1,6 +1,7 @@
 import jax
 import jax.numpy as jnp
 import optax
+import distrax
 from sklearn.metrics import roc_auc_score
 
 from .third_party.calibration import calibration  ## For external usage.
@@ -25,6 +26,13 @@ def categorical_nll(logits, Y):
     '''Negative log-likelihood of categorical distribution.
     '''
     return optax.softmax_cross_entropy_with_integer_labels(logits, Y)
+
+
+@jax.jit
+def categorical_nll_with_p(p, Y):
+    '''Negative log-likelihood of categorical distribution.
+    '''
+    return - distrax.Categorical(probs=p).log_prob(Y)
 
 
 @jax.jit
@@ -75,10 +83,7 @@ def selective_accuracy_auc(p, Y):
     return auc_sel_id
 
 
-def entropy_ood_auc(logits, logits_ood):
-    p = jax.nn.softmax(logits, axis=-1)
-    ood_p = jax.nn.softmax(logits_ood, axis=-1)
-
+def entropy_ood_auc(p, ood_p):
     ent = categorical_entropy(p)
     targets = jnp.zeros_like(ent)
 
