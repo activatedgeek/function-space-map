@@ -56,12 +56,14 @@ def full_eval_model(model_name, num_classes, ckpt_path,
     _, model, params, other_vars = create_model(None, model_name, None, num_classes=num_classes,
                                                 ckpt_path=ckpt_path, ckpt_prefix=ckpt_prefix)
 
-    ## FIXME: temp fix remove extra vars.
-    # other_vars, _ = other_vars.pop('params_logvar')
+    try:
+        other_vars, _ = other_vars.pop('params_logvar')
+    except KeyError:
+        logging.warning('Ignoring extra vars pop.')
 
     @jax.jit
     def f_model(X):
-        return model.apply({ 'params': params, **other_vars}, X, mutable=False, train=False)
+        return model.apply({ 'params': params, **other_vars }, X, mutable=False, train=False)
 
     logging.info(f'Evaluating train metrics...')
     train_metrics = eval_classifier(*eval_logits(f_model, train_loader))
