@@ -1048,6 +1048,9 @@ class TrainerModule:
             return reg
 
         def calculate_parameter_norm(params):
+            ## HOTFIX:
+            return 0.
+
             params_model, params_batchnorm = split_params(params, "batch_norm")
 
             if self.objective_hparams["reg_type"] == "parameter_norm":
