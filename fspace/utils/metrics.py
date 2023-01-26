@@ -94,3 +94,24 @@ def entropy_ood_auc(p, ood_p):
     all_targets = jnp.concatenate([targets, ood_targets])
     
     return roc_auc_score(all_targets, all_ent)
+
+
+def eval_classifier(all_p, all_Y):
+    acc = accuracy(all_p, all_Y)
+
+    sel_acc = selective_accuracy_auc(all_p, all_Y)
+
+    avg_nll = jnp.mean(categorical_nll_with_p(all_p, all_Y), axis=0)
+
+    avg_ent = jnp.mean(categorical_entropy(all_p), axis=0)
+
+    ## TODO: JIT this?
+    ece, _ = calibration(jax.nn.one_hot(all_Y, all_p.shape[-1]), all_p, num_bins=10)
+
+    return {
+        'acc': acc.item(),
+        'sel_acc': sel_acc.item(),
+        'avg_nll': avg_nll.item(),
+        'avg_ent': avg_ent.item(),
+        'ece': ece.item(),
+    }

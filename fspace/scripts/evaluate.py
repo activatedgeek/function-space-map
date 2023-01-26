@@ -4,47 +4,18 @@ import jax
 import jax.numpy as jnp
 
 from fspace.nn import create_model
-from fspace.utils.metrics import \
-    accuracy, \
-    selective_accuracy_auc, \
-    categorical_entropy, \
-    categorical_nll_with_p, \
-    calibration, \
-    entropy_ood_auc
+from fspace.utils.metrics import eval_classifier, entropy_ood_auc
 
 
-def eval_classifier(all_p, all_Y):
-    acc = accuracy(all_p, all_Y)
-
-    sel_acc = selective_accuracy_auc(all_p, all_Y)
-
-    avg_nll = jnp.mean(categorical_nll_with_p(all_p, all_Y), axis=0)
-
-    avg_ent = jnp.mean(categorical_entropy(all_p), axis=0)
-
-    ## TODO: JIT this?
-    ece, _ = calibration(jax.nn.one_hot(all_Y, all_p.shape[-1]), all_p, num_bins=10)
-
-    return {
-        'acc': acc.item(),
-        'sel_acc': sel_acc.item(),
-        'avg_nll': avg_nll.item(),
-        'avg_ent': avg_ent.item(),
-        'ece': ece.item(),
-    }
-
-
-def full_eval_model(model_name, num_classes, ckpt_path,
-                    train_loader, test_loader, val_loader=None, ood_loader=None,
-                    ckpt_prefix='checkpoint_', log_prefix=None):
+def compute_p_fn(model_name, num_classes, ckpt_path, ckpt_prefix='checkpoint_'):
     _, model, params, other_vars = create_model(None, model_name, None, num_classes=num_classes,
                                                 ckpt_path=ckpt_path, ckpt_prefix=ckpt_prefix)
 
-    def compute_model_p(loader):
-        @jax.jit
-        def model_fn(X):
-            return model.apply({ 'params': params, **other_vars }, X, mutable=False, train=False)
+    @jax.jit
+    def model_fn(X):
+        return model.apply({ 'params': params, **other_vars }, X, mutable=False, train=False)
 
+    def compute_p(loader):
         all_logits = []
         all_Y = []
 
@@ -58,19 +29,26 @@ def full_eval_model(model_name, num_classes, ckpt_path,
         all_Y = jnp.concatenate(all_Y)
 
         return all_p, all_Y
+    
+    return compute_p
 
-    logging.info(f'Evaluating train metrics...')
+
+def full_eval_model(compute_model_p,
+                    train_loader, test_loader, val_loader=None, ood_loader=None,
+                    log_prefix=None):
+
+    logging.info(f'Computing train metrics...')
     train_p, train_Y = compute_model_p(train_loader)
     train_metrics = eval_classifier(train_p, train_Y)
     logging.info(train_metrics, extra=dict(metrics=True, prefix=f'{log_prefix}train'))
 
-    logging.info(f'Evaluating test metrics...')
+    logging.info(f'Computing test metrics...')
     test_p, test_Y = compute_model_p(test_loader)
     test_metrics = eval_classifier(test_p, test_Y)
     logging.info(test_metrics, extra=dict(metrics=True, prefix=f'{log_prefix}test'))
 
     if val_loader is not None:
-        logging.info(f'Evaluating validation metrics...')
+        logging.info(f'Computing validation metrics...')
         val_p, val_Y = compute_model_p(val_loader)
         val_metrics = eval_classifier(val_p, val_Y)
     else:
@@ -78,6 +56,7 @@ def full_eval_model(model_name, num_classes, ckpt_path,
     logging.info(val_metrics, extra=dict(metrics=True, prefix=f'{log_prefix}val'))
 
     if ood_loader is not None:
+        logging.info(f'Computing OOD metrics...')
         ood_p, ood_Y = compute_model_p(ood_loader)
         ood_test_metrics = eval_classifier(ood_p, ood_Y)
         ood_auc = entropy_ood_auc(test_p, ood_p)
