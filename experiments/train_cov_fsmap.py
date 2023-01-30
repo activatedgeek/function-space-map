@@ -9,7 +9,7 @@ import optax
 import timm
 import distrax
 
-from fspace.utils.logging import set_logging, finish_logging, wandb
+from fspace.utils.logging import set_logging, wandb
 from fspace.datasets import get_dataset, get_dataset_normalization
 from fspace.nn import create_model
 from fspace.utils.training import TrainState, eval_classifier
@@ -178,7 +178,7 @@ def main(seed=42, log_dir=None, data_dir=None,
 
 
 def entrypoint(log_dir=None, **kwargs):
-    log_dir = set_logging(log_dir=log_dir)
+    log_dir, finish_logging = set_logging(log_dir=log_dir)
 
     main(**kwargs, log_dir=log_dir)
 

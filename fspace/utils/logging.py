@@ -5,24 +5,7 @@ import logging
 from logging.config import dictConfig
 import os
 import time
-
-
-### START: WandB related. ###
 import wandb
-import platform
-
-class WandBNop:
-    config = dict()
-    class _Summary:
-        summary = dict()
-    run = _Summary()
-    def nop(self, *_, **__): pass
-    def __getattr__(self, _): return self.nop
-
-
-## Overload wandb on Windows. See issue https://github.com/wandb/client/issues/1370.
-if platform.system() == 'Windows':
-    wandb = WandBNop()
 
 
 class WnBHandler(logging.Handler):
@@ -38,10 +21,9 @@ class WnBHandler(logging.Handler):
     def emit(self, record):
         metrics = record.msg
         if hasattr(record, 'prefix'):
-            metrics = {f'{record.prefix}/{k}' if k != 'epoch' else k: v for k, v in metrics.items()}
+            metrics = {f'{record.prefix}/{k}': v for k, v in metrics.items()}
         wandb.log(metrics)
 
-### END: WandB related. ###
 
 class MetricsFilter(logging.Filter):
     def __init__(self, extra_key='metrics', invert=False):
@@ -90,25 +72,22 @@ def get_log_dir(log_dir=None):
     if log_dir is not None:
         return Path(log_dir)
 
-    root_dir = None
-    if not isinstance(wandb, WandBNop):
-        root_dir = Path(wandb.run.dir) / '..'
-    else:
-        root_dir = Path(os.environ.get('LOGDIR', Path.cwd() / '.log')) / Path.cwd().name / f'run-{str(uuid4())[:8]}'
-
+    root_dir = Path(os.environ.get('LOGDIR', Path.cwd() / '.log')) / Path.cwd().name / f'run-{str(uuid4())[:8]}'
     log_dir = Path(str((root_dir / 'files').resolve()))
     log_dir.mkdir(parents=True, exist_ok=True)
 
     return log_dir
 
 
-def set_logging(metrics_extra_key='metrics', log_dir=None):
-    wandb.init(
-        mode=os.environ.get('WANDB_MODE', default='offline'),
-        settings=wandb.Settings(start_method="fork"),
-    )
-
-    log_dir = get_log_dir(log_dir=log_dir)
+def set_logging(log_dir=None, use_wandb=True, metrics_extra_key='metrics'):
+    if use_wandb:
+        wandb.init(
+            mode=os.environ.get('WANDB_MODE', default='offline'),
+            # settings=wandb.Settings(start_method="fork"),
+        )
+        log_dir = Path(wandb.run.dir)
+    else:
+        log_dir = get_log_dir(log_dir=log_dir)
 
     _CONFIG = {
         'version': 1,
@@ -135,20 +114,19 @@ def set_logging(metrics_extra_key='metrics', log_dir=None):
                 'stream': 'ext://sys.stdout',
                 'filters': ['nometrics'],
             },
-            ## For using plain file logger.
-            # 'metrics_file': {
-            #     '()': MetricsFileHandler,
-            #     'filename': str(Path(log_dir) / 'metrics.log'),
-            #     'filters': ['metrics'],
-            # },
             'metrics_file': {
+                '()': MetricsFileHandler,
+                'filename': str(Path(log_dir) / 'metrics.log'),
+                'filters': ['metrics'],
+            },
+            'wandb_file': {
                 '()': WnBHandler,
                 'filters': ['metrics'],
             },
         },
         'loggers': {
             '': {
-                'handlers': ['stdout', 'metrics_file'],
+                'handlers': ['stdout', 'wandb_file' if use_wandb else 'metrics_file'],
                 'level': os.environ.get('LOGLEVEL', 'INFO'),
             },
         },
@@ -158,8 +136,8 @@ def set_logging(metrics_extra_key='metrics', log_dir=None):
 
     logging.info(f'Files stored in "{log_dir}".')
 
-    return log_dir
+    def finish_logging():
+        if use_wandb:
+            wandb.finish()
 
-
-def finish_logging():
-    pass
+    return log_dir, finish_logging

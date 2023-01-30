@@ -6,11 +6,11 @@ import jax.numpy as jnp
 from flax.training import checkpoints
 import optax
 
-from fspace.utils.logging import set_logging, finish_logging, wandb
+from fspace.utils.logging import set_logging, wandb
 from fspace.datasets import get_dataset, get_dataset_normalization
 from fspace.nn import create_model
 from fspace.utils.training import TrainState, train_model, eval_classifier
-from fspace.scripts.evaluate import full_eval_model
+from fspace.scripts.evaluate import full_eval_model, compute_p_fn
 
 
 @jax.jit
@@ -120,17 +120,22 @@ def main(seed=42, log_dir=None, data_dir=None,
                                           normalize=get_dataset_normalization(dataset))
         ood_test_loader = DataLoader(ood_test_data, batch_size=batch_size, num_workers=num_workers)
 
-    full_eval_model(model_name, train_data.n_classes, log_dir,
+    logging.info(f'Evaluating latest checkpoint...')
+    full_eval_model(compute_p_fn(model_name, train_data.n_classes, log_dir, ckpt_prefix='checkpoint_'),
                     train_loader, test_loader, val_loader=val_loader, ood_loader=ood_test_loader,
-                    ckpt_prefix='checkpoint_', log_prefix='s/')
+                    log_prefix='s/')
 
-    full_eval_model(model_name, train_data.n_classes, log_dir,
-                    train_loader, test_loader, val_loader=val_loader, ood_loader=ood_test_loader,
-                    ckpt_prefix='best_checkpoint_', log_prefix='s/best/')
+    try:
+        logging.info(f'Evaluating best (validation) checkpoint...')
+        full_eval_model(compute_p_fn(model_name, train_data.n_classes, log_dir, ckpt_prefix='best_checkpoint_'),
+                        train_loader, test_loader, val_loader=val_loader, ood_loader=ood_test_loader,
+                        log_prefix='s/best/')
+    except TypeError:
+        logging.warning('Skipping best checkpoint evaluation.')
 
 
 def entrypoint(log_dir=None, **kwargs):
-    log_dir = set_logging(log_dir=log_dir)
+    log_dir, finish_logging = set_logging(log_dir=log_dir)
 
     main(**kwargs, log_dir=log_dir)
 

@@ -169,7 +169,7 @@ def main(seed=42, log_dir=None, data_dir=None,
 
 
 def entrypoint(log_dir=None, **kwargs):
-    log_dir = set_logging(log_dir=log_dir)
+    log_dir, finish_logging = set_logging(log_dir=log_dir)
 
     main(**kwargs, log_dir=log_dir)
 
