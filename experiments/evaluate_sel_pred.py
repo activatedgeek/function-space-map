@@ -3,7 +3,7 @@ import jax
 import jax.numpy as jnp
 from torch.utils.data import DataLoader
 
-from fspace.utils.logging import set_logging, finish_logging, wandb
+from fspace.utils.logging import set_logging, wandb
 from fspace.nn import create_model
 from fspace.scripts.evaluate import eval_logits
 from fspace.datasets import get_dataset
@@ -55,7 +55,7 @@ def main(log_dir=None, model_name=None, dataset=None, corr_config=None, ckpt_pat
 
 
 def entrypoint(log_dir=None, **kwargs):
-    log_dir = set_logging(log_dir=log_dir)
+    log_dir, finish_logging = set_logging(log_dir=log_dir)
 
     main(**kwargs, log_dir=log_dir)
 
