@@ -11,6 +11,7 @@ from fspace.datasets import get_dataset, get_dataset_normalization
 from fspace.nn import create_model
 from fspace.utils.training import TrainState, train_model, eval_classifier
 from fspace.scripts.evaluate import full_eval_model, compute_p_fn
+from optax_swag import swag_diag
 
 
 @jax.jit
@@ -35,13 +36,33 @@ def train_step_fn(state, b_X, b_Y):
     return final_state, step_metrics
 
 
+@jax.jit
+def update_mutables_fn(state, b_X):
+    def fwd_fn(params, **extra_vars):
+        _, new_state = state.apply_fn({ 'params': params, **extra_vars }, b_X,
+                                        mutable=['batch_stats'], train=True)
+        return new_state
+
+    new_state = fwd_fn(state.params, **state.extra_vars)
+
+    final_state = state.replace(**new_state)
+
+    return final_state
+
+
+def update_mutables(state, loader):
+    for X, _ in tqdm(loader, leave=False):
+        state = update_mutables_fn(state, X.numpy())
+    return state
+
+
 def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
          dataset=None, ood_dataset=None,
          train_subset=1., label_noise=0.,
          batch_size=128, num_workers=4,
-         optimizer='sgd', lr=.1, alpha=0., momentum=.9, reg_scale=0.,
-         epochs=0):
+         optimizer_type='sgd', lr=.1, alpha=0., momentum=.9, reg_scale=0., epochs=0,
+         swa_epochs=0, swa_lr=0.05):
     wandb.config.update({
         'log_dir': log_dir,
         'seed': seed,
@@ -52,12 +73,14 @@ def main(seed=42, log_dir=None, data_dir=None,
         'train_subset': train_subset,
         'label_noise': label_noise,
         'batch_size': batch_size,
-        'optimizer': optimizer,
+        'optimizer_type': optimizer_type,
         'lr': lr,
         'alpha': alpha,
         'momentum': momentum,
         'reg_scale': reg_scale,
         'epochs': epochs,
+        'swa_epochs': swa_epochs,
+        'swa_lr': swa_lr,
     })
 
     rng = jax.random.PRNGKey(seed)
@@ -72,9 +95,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     rng, model, init_params, init_vars = create_model(rng, model_name, train_data[0][0].numpy()[None, ...],
                                                       num_classes=train_data.n_classes, ckpt_path=ckpt_path)
 
-    if optimizer == 'adamw':
-        optimizer = optax.adamw(learning_rate=lr, weight_decay=reg_scale)
-    elif optimizer == 'sgd':
+    if optimizer_type == 'sgd':
         optimizer = optax.chain(
             optax.add_decayed_weights(reg_scale),
             optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader), alpha), momentum=momentum),
@@ -90,27 +111,55 @@ def main(seed=42, log_dir=None, data_dir=None,
 
     train_fn = lambda *args, **kwargs: train_model(*args, train_step_fn, **kwargs)
 
-    best_acc_so_far = 0.
     for e in tqdm(range(epochs)):
         train_state = train_fn(train_state, train_loader, log_dir=log_dir, epoch=e)
 
         val_metrics = eval_classifier(train_state, val_loader or test_loader)
         logging.info({ 'epoch': e, **val_metrics }, extra=dict(metrics=True, prefix='val'))
-
-        if val_metrics['acc'] > best_acc_so_far:
-            best_acc_so_far = val_metrics['acc']
-
-            logging.info(f"Epoch {e}: {best_acc_so_far:.4f} (Val)")
-
-            checkpoints.save_checkpoint(ckpt_dir=log_dir,
-                                        target={'params': train_state.params, **train_state.extra_vars},
-                                        step=e,
-                                        prefix='best_checkpoint_',
-                                        overwrite=True)
+        logging.debug({ 'epoch': e, **val_metrics })
 
         checkpoints.save_checkpoint(ckpt_dir=log_dir,
                                     target={'params': train_state.params, **train_state.extra_vars},
                                     step=e,
+                                    overwrite=True)
+
+    ## Re-init optimizer for SWA.
+    if optimizer_type == 'sgd':
+        optimizer = optax.chain(
+            optax.add_decayed_weights(reg_scale),
+            optax.sgd(learning_rate=swa_lr, momentum=momentum),
+            swag_diag(len(train_loader)),
+        )
+    else:
+        raise NotImplementedError
+
+    train_state = TrainState.create(
+        apply_fn=model.apply,
+        params=train_state.params,
+        **train_state.extra_vars,
+        tx=optimizer)
+
+    for e in tqdm(range(swa_epochs)):
+        train_state = train_fn(train_state, train_loader, log_dir=log_dir, epoch=e)
+
+        val_metrics = eval_classifier(train_state, val_loader or test_loader)
+        logging.info({ 'epoch': epochs + e, **val_metrics }, extra=dict(metrics=True, prefix='val'))
+        logging.debug({ 'epoch': epochs + e, **val_metrics })
+
+        ## Update mutables like BatchNorm stats under SWA param.
+        swag_state = TrainState.create(
+            apply_fn=model.apply,
+            params=train_state.opt_state[-1].params,
+            **train_state.extra_vars)
+        swag_state = update_mutables(swag_state, train_loader)
+
+        checkpoints.save_checkpoint(ckpt_dir=log_dir,
+                                    target={
+                                        'params': train_state.opt_state[-1].params,
+                                        'params_var': train_state.opt_state[-1].params_var,
+                                         **swag_state.extra_vars },
+                                    step=epochs + e,
+                                    prefix='swa_checkpoint_',
                                     overwrite=True)
 
     ## Full evaluation only at the end of training.
@@ -124,14 +173,6 @@ def main(seed=42, log_dir=None, data_dir=None,
     full_eval_model(compute_p_fn(model_name, train_data.n_classes, log_dir, ckpt_prefix='checkpoint_'),
                     train_loader, test_loader, val_loader=val_loader, ood_loader=ood_test_loader,
                     log_prefix='s/')
-
-    try:
-        logging.info(f'Evaluating best (validation) checkpoint...')
-        full_eval_model(compute_p_fn(model_name, train_data.n_classes, log_dir, ckpt_prefix='best_checkpoint_'),
-                        train_loader, test_loader, val_loader=val_loader, ood_loader=ood_test_loader,
-                        log_prefix='s/best/')
-    except TypeError:
-        logging.warning('Skipping best checkpoint evaluation.')
 
 
 def entrypoint(log_dir=None, **kwargs):

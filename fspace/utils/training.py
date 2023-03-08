@@ -19,6 +19,19 @@ class TrainState(train_state.TrainState):
             for v in ['batch_stats']
             if isinstance(getattr(self, v), flax.core.FrozenDict)
         }
+    
+    @classmethod
+    def create(cls, *, apply_fn, params, tx=None, **kwargs):
+        """Creates a new instance with `step=0` and initialized `opt_state`."""
+        opt_state = tx.init(params) if tx is not None else None
+        return cls(
+            step=0,
+            apply_fn=apply_fn,
+            params=params,
+            tx=tx,
+            opt_state=opt_state,
+            **kwargs,
+        )
 
 
 def train_model(state, loader, step_fn, log_dir=None, epoch=None):

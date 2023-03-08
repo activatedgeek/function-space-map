@@ -9,7 +9,8 @@ def tree_split(key, ref_tree):
 
 
 @jax.jit
-def sample_tree(key_tree, ref_tree, mean, std):
+def sample_tree(key, ref_tree, mean, std):
+    key, key_tree = tree_split(key, ref_tree)
     def _sample_param(key, param):
         return mean + std * jax.random.normal(key, param.shape, param.dtype)
-    return jax.tree_util.tree_map(_sample_param, key_tree, ref_tree)
+    return key, jax.tree_util.tree_map(_sample_param, key_tree, ref_tree)
