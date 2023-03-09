@@ -42,7 +42,7 @@ def sample_swag_diag(key: chex.PRNGKey, state: SWAGDiagState, eps: float = 1e-30
 
 @partial(jax.jit, static_argnames=['rank'])
 def sample_swag(key: chex.PRNGKey, state: SWAGState, rank: int, scale: float = 1., eps: float = 1e-30) -> optax.Params:
-    mean, unflatten_tree = jax.flatten_util.ravel_pytree(state.mean)
+    mean, tree_unflatten_fn = jax.flatten_util.ravel_pytree(state.mean)
     p2, _ = jax.flatten_util.ravel_pytree(state.params2)
     
     std = jnp.sqrt(jnp.clip(p2 - jnp.square(mean), a_min=eps))
@@ -57,4 +57,4 @@ def sample_swag(key: chex.PRNGKey, state: SWAGState, rank: int, scale: float = 1
     z2 = jax.random.normal(z2_key, (rank,))
     z2_scale = scale / jnp.sqrt(2 * (rank - 1))
 
-    return unflatten_tree(mean + z1_scale * std * z1 + z2_scale * jnp.matmul(dparams.T, z2))
+    return tree_unflatten_fn(mean + z1_scale * std * z1 + z2_scale * jnp.matmul(dparams.T, z2))

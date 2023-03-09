@@ -11,8 +11,11 @@ from optax_swag import swag, sample_swag_diag, sample_swag
 from fspace.utils.logging import set_logging, wandb
 from fspace.datasets import get_dataset, get_dataset_normalization
 from fspace.nn import create_model
-from fspace.utils.training import TrainState, train_model, eval_classifier, update_mutables
-from fspace.scripts.evaluate import full_eval_model, compute_prob_fn, compute_prob_ensemble_fn
+from fspace.utils.training import TrainState, train_model
+from fspace.scripts.evaluate import \
+    cheap_eval_model, full_eval_model, \
+    compute_prob_fn, compute_prob_ensemble_fn, \
+    compute_mutables_fn
 
 
 @jax.jit
@@ -45,7 +48,7 @@ def main(seed=42, log_dir=None, data_dir=None,
          optimizer_type='sgd', lr=.1, alpha=0., momentum=.9, reg_scale=0., epochs=0,
          swa_epochs=0, swa_lr=0.05, swag_rank=0, swag_samples=0):
     
-    ## SWA updates happen every
+    ## SWA updates every epoch.
     swag_rank = min(swa_epochs, swag_rank)
     
     wandb.config.update({
@@ -102,7 +105,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         train_state = train_fn(train_state, train_loader, log_dir=log_dir, epoch=e)
 
         if (e + 1) % 10 == 0:
-            val_metrics = eval_classifier(train_state, val_loader or test_loader)
+            val_metrics = cheap_eval_model(compute_prob_fn(model, train_state.params, train_state.extra_vars), val_loader or test_loader)
             logging.info({ 'epoch': e, **val_metrics }, extra=dict(metrics=True, prefix='val'))
             logging.debug({ 'epoch': e, **val_metrics })
 
@@ -130,17 +133,16 @@ def main(seed=42, log_dir=None, data_dir=None,
     for e in tqdm(range(swa_epochs)):
         train_state = train_fn(train_state, train_loader, log_dir=log_dir, epoch=e)
 
-        if (e + 1) % 1 == 0:
-            ## Update mutables like BatchNorm stats under SWA param.
-            swa_train_state = TrainState.create(
-                apply_fn=model.apply,
-                params=train_state.opt_state[-1].mean,
-                **train_state.extra_vars)
-            swa_train_state = update_mutables(swa_train_state, train_loader)
+        if (e + 1) % 10 == 0:
+            _swa_params = jax.tree_map(lambda p: p[jnp.newaxis, ...], train_state.opt_state[-1].mean)
+            _extra_vars = jax.tree_map(lambda v: v[jnp.newaxis, ...], train_state.extra_vars)
+            _swa_extra_vars = compute_mutables_fn(model, _swa_params)(train_loader, _extra_vars)
 
-            val_metrics = eval_classifier(swa_train_state, val_loader or test_loader)
-            logging.info({ 'epoch': e, **val_metrics }, extra=dict(metrics=True, prefix='val'))
-            logging.debug({ 'epoch': e, **val_metrics })
+            val_metrics = cheap_eval_model(compute_prob_ensemble_fn(model, _swa_params, _swa_extra_vars),
+                                           val_loader or test_loader)
+            
+            logging.info({ 'epoch': epochs + e, **val_metrics }, extra=dict(metrics=True, prefix='val'))
+            logging.debug({ 'epoch': epochs + e, **val_metrics })
 
         checkpoints.save_checkpoint(ckpt_dir=log_dir,
                                     target=train_state.opt_state[-1]._asdict(),
@@ -150,8 +152,6 @@ def main(seed=42, log_dir=None, data_dir=None,
 
     if swa_epochs:
         swa_opt_state = train_state.opt_state[-1]
-        ## FIXME: needs to be computed for every sample.
-        swa_extra_vars = swa_train_state.extra_vars
         
         if swag_samples:
             rng, *samples_rng = jax.random.split(rng, 1 + swag_samples)
@@ -167,11 +167,16 @@ def main(seed=42, log_dir=None, data_dir=None,
                 swag_sample_params = jax.vmap(sample_swag_diag, in_axes=(0, None))(
                     jnp.array(samples_rng), swa_opt_state)
 
+            swa_extra_vars = compute_mutables_fn(model, swag_sample_params)(train_loader, 
+                                                                            jax.tree_map(lambda v: jnp.repeat(v[jnp.newaxis, ...], swag_samples, 0), train_state.extra_vars))
             c_fn = compute_prob_ensemble_fn(model, swag_sample_params, swa_extra_vars)
         else:
             logging.debug('Constructing SWA evaluation...')
 
-            c_fn = compute_prob_fn(model, swa_opt_state.mean, swa_extra_vars)
+            swa_params = jax.tree_map(lambda p: p[jnp.newaxis, ...], swa_opt_state.mean)
+            swa_extra_vars = compute_mutables_fn(model, swa_params)(train_loader, 
+                                                                    jax.tree_map(lambda v: v[jnp.newaxis, ...], train_state.extra_vars))
+            c_fn = compute_prob_fn(model, swa_params, swa_extra_vars)
     else:
         logging.debug(f'Constructing model evaluation...')
 

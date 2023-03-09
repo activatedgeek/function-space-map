@@ -96,6 +96,20 @@ def entropy_ood_auc(p, ood_p):
     return roc_auc_score(all_targets, all_ent)
 
 
+def cheap_eval_classifier(all_p, all_Y):
+    acc = accuracy(all_p, all_Y)
+
+    avg_nll = jnp.mean(categorical_nll_with_p(all_p, all_Y), axis=0)
+
+    avg_ent = jnp.mean(categorical_entropy(all_p), axis=0)
+
+    return {
+        'acc': acc.item(),
+        'avg_nll': avg_nll.item(),
+        'avg_ent': avg_ent.item(),
+    }
+
+
 def eval_classifier(all_p, all_Y):
     acc = accuracy(all_p, all_Y)
 

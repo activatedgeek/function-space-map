@@ -3,10 +3,10 @@ from tqdm.auto import tqdm
 import jax
 import jax.numpy as jnp
 
-from fspace.utils.metrics import eval_classifier, entropy_ood_auc
+from fspace.utils.metrics import cheap_eval_classifier, eval_classifier, entropy_ood_auc
 
 
-def compute_prob_ensemble_fn(model, batch_params, extra_vars):
+def compute_prob_ensemble_fn(model, batch_params, batch_extra_vars):
     """Compute classifier ensemble.
     
     A `jax.vmap` over the model parameters.
@@ -15,7 +15,7 @@ def compute_prob_ensemble_fn(model, batch_params, extra_vars):
     @jax.jit
     def model_fn(params, extra_vars, X):
         return model.apply({ 'params': params, **extra_vars }, X, mutable=False, train=False)
-    ens_model_fn = jax.vmap(model_fn, in_axes=(0, None, None))
+    ens_model_fn = jax.vmap(model_fn, in_axes=(0, 0, None))
     
     def compute_ensemble(loader):
         all_ens_logits = []
@@ -23,7 +23,7 @@ def compute_prob_ensemble_fn(model, batch_params, extra_vars):
         
         for X, Y in tqdm(loader, leave=False):
             X, Y = X.numpy(), Y.numpy()
-            all_ens_logits.append(ens_model_fn(batch_params, extra_vars, X))
+            all_ens_logits.append(ens_model_fn(batch_params, batch_extra_vars, X))
             all_Y.append(Y)
         
         all_p = jnp.mean(jax.nn.softmax(jnp.concatenate(all_ens_logits, axis=-2), axis=-1), axis=0)
@@ -37,7 +37,28 @@ def compute_prob_ensemble_fn(model, batch_params, extra_vars):
 def compute_prob_fn(model, params, extra_vars):
     """Compute classifier output"""
     batch_params = jax.tree_util.tree_map(lambda p: p[jnp.newaxis, ...], params)
-    return compute_prob_ensemble_fn(model, batch_params, extra_vars)
+    batch_extra_vars = jax.tree_util.tree_map(lambda e: e[jnp.newaxis, ...], extra_vars)
+    return compute_prob_ensemble_fn(model, batch_params, batch_extra_vars)
+
+
+def compute_mutables_fn(model, batch_params):
+    @jax.jit
+    def model_fn(params, extra_vars, X):
+        return model.apply({ 'params': params, **extra_vars }, X,
+                           mutable=['batch_stats'], train=True)[-1]
+    ens_model_fn = jax.vmap(model_fn, in_axes=(0, 0, None))
+
+    def compute_mutables(loader, batch_extra_vars):
+        for X, _ in tqdm(loader, leave=False):
+            batch_extra_vars = ens_model_fn(batch_params, batch_extra_vars, X.numpy())
+        return batch_extra_vars
+    
+    return compute_mutables
+
+
+def cheap_eval_model(compute_model_p, loader):
+    p, Y = compute_model_p(loader)
+    return cheap_eval_classifier(p, Y)
 
 
 def full_eval_model(compute_model_p,
