@@ -3,7 +3,6 @@ from tqdm.auto import tqdm
 import jax
 import jax.numpy as jnp
 
-from fspace.nn import create_model
 from fspace.utils.metrics import eval_classifier, entropy_ood_auc
 
 
@@ -37,7 +36,7 @@ def compute_prob_ensemble_fn(model, batch_params, extra_vars):
 
 def compute_prob_fn(model, params, extra_vars):
     """Compute classifier output"""
-    batch_params = jax.tree_util.tree_map(lambda p: jnp.expand_dims(p, 0), params)
+    batch_params = jax.tree_util.tree_map(lambda p: p[jnp.newaxis, ...], params)
     return compute_prob_ensemble_fn(model, batch_params, extra_vars)
 
 
