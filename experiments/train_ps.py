@@ -44,6 +44,10 @@ def main(seed=42, log_dir=None, data_dir=None,
          batch_size=128, num_workers=4,
          optimizer_type='sgd', lr=.1, alpha=0., momentum=.9, reg_scale=0., epochs=0,
          swa_epochs=0, swa_lr=0.05, swag_rank=0, swag_samples=0):
+    
+    ## SWA updates happen every
+    swag_rank = min(swa_epochs, swag_rank)
+    
     wandb.config.update({
         'log_dir': log_dir,
         'seed': seed,
@@ -81,7 +85,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     if optimizer_type == 'sgd':
         optimizer = optax.chain(
             optax.add_decayed_weights(reg_scale),
-            optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader), alpha), momentum=momentum),
+            optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader), alpha) if epochs else lr, momentum=momentum),
         )
     else:
         raise NotImplementedError
@@ -112,7 +116,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         optimizer = optax.chain(
             optax.add_decayed_weights(reg_scale),
             optax.sgd(learning_rate=swa_lr, momentum=momentum),
-            swag(len(train_loader), min(swa_epochs, swag_rank)),
+            swag(len(train_loader), swag_rank),
         )
     else:
         raise NotImplementedError
@@ -126,7 +130,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     for e in tqdm(range(swa_epochs)):
         train_state = train_fn(train_state, train_loader, log_dir=log_dir, epoch=e)
 
-        if (e + 1) % 10 == 0:
+        if (e + 1) % 1 == 0:
             ## Update mutables like BatchNorm stats under SWA param.
             swa_train_state = TrainState.create(
                 apply_fn=model.apply,
@@ -156,7 +160,7 @@ def main(seed=42, log_dir=None, data_dir=None,
                 logging.debug(f'Constructing {swag_samples} samples for SWAG evaluation...')
 
                 swag_sample_params = jax.vmap(sample_swag, in_axes=(0, None, None))(
-                    jnp.array(samples_rng), swa_opt_state, min(swa_epochs, swag_rank))
+                    jnp.array(samples_rng), swa_opt_state, swag_rank)
             else:
                 logging.debug(f'Constructing {swag_samples} samples for SWAG-Diag evaluation...')
 
