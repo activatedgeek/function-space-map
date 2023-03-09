@@ -74,3 +74,23 @@ def eval_classifier(state, loader):
         'acc': acc.item(),
         'avg_nll': avg_nll.item(),
     }
+
+
+@jax.jit
+def update_mutables_fn(state, b_X):
+    def fwd_fn(params, **extra_vars):
+        _, new_state = state.apply_fn({ 'params': params, **extra_vars }, b_X,
+                                        mutable=['batch_stats'], train=True)
+        return new_state
+
+    new_state = fwd_fn(state.params, **state.extra_vars)
+
+    final_state = state.replace(**new_state)
+
+    return final_state
+
+
+def update_mutables(state, loader):
+    for X, _ in tqdm(loader, leave=False):
+        state = update_mutables_fn(state, X.numpy())
+    return state

@@ -7,30 +7,38 @@ from fspace.nn import create_model
 from fspace.utils.metrics import eval_classifier, entropy_ood_auc
 
 
-def compute_p_fn(model_name, num_classes, ckpt_path, ckpt_prefix='checkpoint_'):
-    _, model, params, other_vars = create_model(None, model_name, None, num_classes=num_classes,
-                                                ckpt_path=ckpt_path, ckpt_prefix=ckpt_prefix)
+def compute_prob_ensemble_fn(model, batch_params, extra_vars):
+    """Compute classifier ensemble.
+    
+    A `jax.vmap` over the model parameters.
+    """
 
     @jax.jit
-    def model_fn(X):
-        return model.apply({ 'params': params, **other_vars }, X, mutable=False, train=False)
-
-    def compute_p(loader):
-        all_logits = []
+    def model_fn(params, extra_vars, X):
+        return model.apply({ 'params': params, **extra_vars }, X, mutable=False, train=False)
+    ens_model_fn = jax.vmap(model_fn, in_axes=(0, None, None))
+    
+    def compute_ensemble(loader):
+        all_ens_logits = []
         all_Y = []
-
+        
         for X, Y in tqdm(loader, leave=False):
             X, Y = X.numpy(), Y.numpy()
-
-            all_logits.append(model_fn(X))
+            all_ens_logits.append(ens_model_fn(batch_params, extra_vars, X))
             all_Y.append(Y)
-
-        all_p = jax.nn.softmax(jnp.concatenate(all_logits), axis=-1)
+        
+        all_p = jnp.mean(jax.nn.softmax(jnp.concatenate(all_ens_logits, axis=-2), axis=-1), axis=0)
         all_Y = jnp.concatenate(all_Y)
-
-        return all_p, all_Y
     
-    return compute_p
+        return all_p, all_Y
+
+    return compute_ensemble
+
+
+def compute_prob_fn(model, params, extra_vars):
+    """Compute classifier output"""
+    batch_params = jax.tree_util.tree_map(lambda p: jnp.expand_dims(p, 0), params)
+    return compute_prob_ensemble_fn(model, batch_params, extra_vars)
 
 
 def full_eval_model(compute_model_p,
@@ -51,10 +59,8 @@ def full_eval_model(compute_model_p,
         logging.info(f'Computing validation metrics...')
         val_p, val_Y = compute_model_p(val_loader)
         val_metrics = eval_classifier(val_p, val_Y)
-    else:
-        val_metrics = test_metrics
-    logging.info(val_metrics, extra=dict(metrics=True, prefix=f'{log_prefix}val'))
-
+        logging.info(val_metrics, extra=dict(metrics=True, prefix=f'{log_prefix}val'))
+    
     if ood_loader is not None:
         logging.info(f'Computing OOD metrics...')
         ood_p, ood_Y = compute_model_p(ood_loader)

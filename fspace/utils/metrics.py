@@ -105,8 +105,11 @@ def eval_classifier(all_p, all_Y):
 
     avg_ent = jnp.mean(categorical_entropy(all_p), axis=0)
 
-    ## TODO: JIT this?
-    ece, _ = calibration(jax.nn.one_hot(all_Y, all_p.shape[-1]), all_p, num_bins=10)
+    try:
+        ## TODO: JIT this?
+        ece, _ = calibration(jax.nn.one_hot(all_Y, all_p.shape[-1]), all_p, num_bins=10)
+    except ZeroDivisionError:
+        ece = jnp.array([jnp.nan])
 
     return {
         'acc': acc.item(),

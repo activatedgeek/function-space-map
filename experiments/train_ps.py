@@ -6,12 +6,14 @@ import jax.numpy as jnp
 from flax.training import checkpoints
 import optax
 
+from optax_swag import swag_diag
+
 from fspace.utils.logging import set_logging, wandb
 from fspace.datasets import get_dataset, get_dataset_normalization
 from fspace.nn import create_model
-from fspace.utils.training import TrainState, train_model, eval_classifier
-from fspace.scripts.evaluate import full_eval_model, compute_p_fn
-from optax_swag import swag_diag
+from fspace.utils.training import TrainState, train_model, eval_classifier, update_mutables
+from fspace.scripts.evaluate import full_eval_model, compute_prob_fn, compute_prob_ensemble_fn
+from fspace.utils.random import sample_tree_diag_gaussian
 
 
 @jax.jit
@@ -36,33 +38,13 @@ def train_step_fn(state, b_X, b_Y):
     return final_state, step_metrics
 
 
-@jax.jit
-def update_mutables_fn(state, b_X):
-    def fwd_fn(params, **extra_vars):
-        _, new_state = state.apply_fn({ 'params': params, **extra_vars }, b_X,
-                                        mutable=['batch_stats'], train=True)
-        return new_state
-
-    new_state = fwd_fn(state.params, **state.extra_vars)
-
-    final_state = state.replace(**new_state)
-
-    return final_state
-
-
-def update_mutables(state, loader):
-    for X, _ in tqdm(loader, leave=False):
-        state = update_mutables_fn(state, X.numpy())
-    return state
-
-
 def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
          dataset=None, ood_dataset=None,
          train_subset=1., label_noise=0.,
          batch_size=128, num_workers=4,
          optimizer_type='sgd', lr=.1, alpha=0., momentum=.9, reg_scale=0., epochs=0,
-         swa_epochs=0, swa_lr=0.05):
+         swa_epochs=0, swa_lr=0.05, swag_samples=0):
     wandb.config.update({
         'log_dir': log_dir,
         'seed': seed,
@@ -81,6 +63,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         'epochs': epochs,
         'swa_epochs': swa_epochs,
         'swa_lr': swa_lr,
+        'swag_samples': swag_samples,
     })
 
     rng = jax.random.PRNGKey(seed)
@@ -114,9 +97,10 @@ def main(seed=42, log_dir=None, data_dir=None,
     for e in tqdm(range(epochs)):
         train_state = train_fn(train_state, train_loader, log_dir=log_dir, epoch=e)
 
-        val_metrics = eval_classifier(train_state, val_loader or test_loader)
-        logging.info({ 'epoch': e, **val_metrics }, extra=dict(metrics=True, prefix='val'))
-        logging.debug({ 'epoch': e, **val_metrics })
+        if (e + 1) % 10 == 0:
+            val_metrics = eval_classifier(train_state, val_loader or test_loader)
+            logging.info({ 'epoch': e, **val_metrics }, extra=dict(metrics=True, prefix='val'))
+            logging.debug({ 'epoch': e, **val_metrics })
 
         checkpoints.save_checkpoint(ckpt_dir=log_dir,
                                     target={'params': train_state.params, **train_state.extra_vars},
@@ -142,25 +126,53 @@ def main(seed=42, log_dir=None, data_dir=None,
     for e in tqdm(range(swa_epochs)):
         train_state = train_fn(train_state, train_loader, log_dir=log_dir, epoch=e)
 
-        val_metrics = eval_classifier(train_state, val_loader or test_loader)
-        logging.info({ 'epoch': epochs + e, **val_metrics }, extra=dict(metrics=True, prefix='val'))
-        logging.debug({ 'epoch': epochs + e, **val_metrics })
-
         ## Update mutables like BatchNorm stats under SWA param.
-        swag_state = TrainState.create(
+        _swag_state = TrainState.create(
             apply_fn=model.apply,
-            params=train_state.opt_state[-1].params,
+            params=train_state.opt_state[-1].mean,
             **train_state.extra_vars)
-        swag_state = update_mutables(swag_state, train_loader)
+        _swag_state = update_mutables(_swag_state, train_loader)
+
+        if (e + 1) % 10 == 0:
+            val_metrics = eval_classifier(_swag_state, val_loader or test_loader)
+            logging.info({ 'epoch': e, **val_metrics }, extra=dict(metrics=True, prefix='val'))
+            logging.debug({ 'epoch': e, **val_metrics })
 
         checkpoints.save_checkpoint(ckpt_dir=log_dir,
                                     target={
-                                        'params': train_state.opt_state[-1].params,
-                                        'params_var': train_state.opt_state[-1].params_var,
-                                         **swag_state.extra_vars },
+                                        'mean': train_state.opt_state[-1].mean,
+                                        'params2': train_state.opt_state[-1].params2,
+                                         **_swag_state.extra_vars },
                                     step=epochs + e,
                                     prefix='swa_checkpoint_',
                                     overwrite=True)
+
+    if swa_epochs:
+        swa_mean = train_state.opt_state[-1].mean
+        swa_extra_vars = _swag_state.extra_vars
+        
+        if swag_samples:
+            logging.debug(f'Constructing {swag_samples} samples for SWAG evaluation...')
+
+            swa_params2 = train_state.opt_state[-1].params2
+
+            rng, *samples_rng = jax.random.split(rng, 1 + swag_samples)
+
+            swa_var = jax.tree_util.tree_map(lambda mu, p2: jnp.clip(p2 - jnp.square(mu), a_min=1e-6),
+                                             swa_mean, swa_params2)
+            
+            swa_sample_params = jax.vmap(sample_tree_diag_gaussian, in_axes=(0, None, None))(
+                jnp.array(samples_rng), swa_mean, swa_var)
+
+            c_fn = compute_prob_ensemble_fn(model, swa_sample_params, swa_extra_vars)
+        else:
+            logging.debug('Constructing SWA evaluation...')
+
+            c_fn = compute_prob_fn(model, swa_mean, swa_extra_vars)
+    else:
+        logging.debug(f'Constructing model evaluation...')
+
+        c_fn = compute_prob_fn(model, train_state.params, train_state.extra_vars)
 
     ## Full evaluation only at the end of training.
     ood_test_loader = None
@@ -169,8 +181,7 @@ def main(seed=42, log_dir=None, data_dir=None,
                                           normalize=get_dataset_normalization(dataset))
         ood_test_loader = DataLoader(ood_test_data, batch_size=batch_size, num_workers=num_workers)
 
-    logging.info(f'Evaluating latest checkpoint...')
-    full_eval_model(compute_p_fn(model_name, train_data.n_classes, log_dir, ckpt_prefix='checkpoint_'),
+    full_eval_model(c_fn,
                     train_loader, test_loader, val_loader=val_loader, ood_loader=ood_test_loader,
                     log_prefix='s/')
 
