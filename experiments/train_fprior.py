@@ -63,6 +63,7 @@ import wandb
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--dataset', type=str, default='FMNIST')  # cifar10, cifar10-224, fmnist, two-moons
+parser.add_argument('--train_subset', type=float, default=1.)
 parser.add_argument("--batch_size", type=int, default=128)
 parser.add_argument("--context_set_size", type=int, default=128)
 parser.add_argument("--num_epochs", type=int, default=20)
@@ -94,6 +95,7 @@ parser.add_argument('--gpu_mem_frac', type=float, default=0)
 args = parser.parse_args()
 
 dataset = args.dataset
+train_subset = args.train_subset
 data_dir = os.environ.get('DATADIR')
 batch_size = args.batch_size
 context_set_size = args.context_set_size
@@ -729,6 +731,19 @@ elif dataset in ['aptos', 'cassava', 'melanoma']:
                                  persistent_workers=True)
 else:
     raise ValueError("Dataset not found.")
+
+
+if np.abs(train_subset) < 1:
+    n = len(train_dataset)
+    ns = int(n * np.abs(train_subset))
+
+    ## NOTE: -ve train_subset fraction to get latter segment.
+    randperm = torch.randperm(n, generator=torch.Generator().manual_seed(seed))
+    randperm = randperm[ns:] if train_subset < 0 else randperm[:ns]
+
+    train_dataset = data.Subset(train_dataset, randperm)
+
+    print(f'Dataset size: {len(train_dataset)}')
 
 
 train_loader = data.DataLoader(train_dataset,
