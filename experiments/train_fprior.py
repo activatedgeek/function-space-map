@@ -1,6 +1,7 @@
 ## Standard libraries
 import os
 import numpy as np
+from pathlib import Path
 from PIL import Image
 from typing import Any
 from collections import defaultdict
@@ -491,8 +492,9 @@ class TwoMoons(torch.utils.data.Dataset):
         return ret
 
 if dataset == 'cifar10' or dataset == 'cifar10-224':
+    data_dir = os.environ.get('DATADIR')
     # _train_dataset = CIFAR10(root=DATASET_PATH, train=True, download=True)
-    _train_dataset = CIFAR10(root=os.environ.get('DATADIR'), train=True, download=False)
+    _train_dataset = CIFAR10(root=data_dir, train=True, download=False)
     input_dim = 32
     num_classes = 10
     dataset_size = 50000
@@ -538,15 +540,15 @@ if dataset == 'cifar10' or dataset == 'cifar10-224':
     test_transform = transforms.Compose(test_transform_list)
     train_transform = transforms.Compose(train_transform_list)
 
-    _train_dataset = CIFAR10(root="./data/CIFAR10", train=True, transform=train_transform, download=False)
+    _train_dataset = CIFAR10(root=data_dir, train=True, transform=train_transform, download=False)
     # val_dataset = CIFAR10(root=DATASET_PATH, train=True, transform=test_transform, download=True)
-    val_dataset = CIFAR10(root="./data/CIFAR10", train=True, transform=test_transform, download=False)
+    val_dataset = CIFAR10(root=data_dir, train=True, transform=test_transform, download=False)
 
     train_dataset, _ = torch.utils.data.random_split(_train_dataset, [training_dataset_size, 0], generator=torch.Generator().manual_seed(seed))
     _, validation_dataset = torch.utils.data.random_split(val_dataset, [training_dataset_size-validation_dataset_size, validation_dataset_size], generator=torch.Generator().manual_seed(seed))
 
     # test_dataset = CIFAR10(root=DATASET_PATH, train=False, transform=test_transform, download=True)
-    test_dataset = CIFAR10(root="./data/CIFAR10", train=False, transform=test_transform, download=False)
+    test_dataset = CIFAR10(root=data_dir, train=False, transform=test_transform, download=False)
 
     if context_transform:
         context_transform_list = [
@@ -565,22 +567,22 @@ if dataset == 'cifar10' or dataset == 'cifar10-224':
         context_transform = test_transform
 
     if context_points == "train":
-        context_dataset = CIFAR10(root="./data/CIFAR10", train=True, transform=context_transform, download=False)
+        context_dataset = CIFAR10(root=data_dir, train=True, transform=context_transform, download=False)
     elif context_points == "cifar100":
-        context_dataset = CIFAR100(root="./data/CIFAR100", train=True, transform=context_transform, download=False)
+        context_dataset = CIFAR100(root=data_dir, train=True, transform=context_transform, download=False)
     elif context_points == "svhn":
-        context_dataset = SVHN(root="./data/SVHN", split="train", download=False, transform=context_transform)
+        context_dataset = SVHN(root=Path(data_dir) / 'svhn', split="train", download=False, transform=context_transform)
     elif context_points == "imagenet":
-        context_dataset = ImageNet(root="./data/ImageNet", train=True, transform=context_transform, download=True)
+        context_dataset = ImageNet(root=data_dir, train=True, transform=context_transform, download=True)
     else:
         ValueError("Unknown context dataset")
     
     context_set, _ = torch.utils.data.random_split(context_dataset, [50000, 0], generator=torch.Generator().manual_seed(seed))
 
     if ood_points == "svhn":
-        ood_dataset = SVHN(root="./data/SVHN", split="test", download=False, transform=test_transform)
+        ood_dataset = SVHN(root=Path(data_dir) / 'svhn', split="test", download=False, transform=test_transform)
     elif ood_points == "cifar100":
-        ood_dataset = CIFAR100(root="./data/CIFAR100", train=False, download=False, transform=test_transform)
+        ood_dataset = CIFAR100(root=data_dir, train=False, download=False, transform=test_transform)
     else:
         ValueError("Unknown OOD dataset")
 
@@ -694,7 +696,8 @@ elif dataset == 'cifar100' or dataset == 'cifar100-224':
                                  persistent_workers=True)
 
 elif dataset == 'fmnist' or dataset == 'fmnist-224':
-    _train_dataset = FashionMNIST(root="./data/fashionMNIST", train=True, download=False)
+    data_dir = os.environ.get('DATADIR')
+    _train_dataset = FashionMNIST(root=data_dir, train=True, download=False)
     input_dim = 28
     num_classes = 10
     dataset_size = 60000
@@ -746,13 +749,13 @@ elif dataset == 'fmnist' or dataset == 'fmnist-224':
         test_transform_list.append(image_to_numpy)
         train_transform_list.append(image_to_numpy)
 
-    _train_dataset = FashionMNIST(root="./data/fashionMNIST", train=True, transform=train_transform, download=False)
-    val_dataset = FashionMNIST(root="./data/fashionMNIST", train=True, transform=test_transform, download=False)
+    _train_dataset = FashionMNIST(root=data_dir, train=True, transform=train_transform, download=False)
+    val_dataset = FashionMNIST(root=data_dir, train=True, transform=test_transform, download=False)
 
     train_dataset, _ = torch.utils.data.random_split(_train_dataset, [training_dataset_size, 0], generator=torch.Generator().manual_seed(seed))
     _, validation_dataset = torch.utils.data.random_split(val_dataset, [training_dataset_size-validation_dataset_size, validation_dataset_size], generator=torch.Generator().manual_seed(seed))
 
-    test_dataset = FashionMNIST(root="./data/fashionMNIST", train=False, transform=test_transform, download=False)
+    test_dataset = FashionMNIST(root=data_dir, train=False, transform=test_transform, download=False)
 
     if context_transform:
         context_transform_list = [
@@ -772,22 +775,22 @@ elif dataset == 'fmnist' or dataset == 'fmnist-224':
         context_transform = test_transform
 
     if context_points == "train":
-        context_dataset = FashionMNIST(root="./data/fashionMNIST", train=True, transform=context_transform, download=False)
+        context_dataset = FashionMNIST(root=data_dir, train=True, transform=context_transform, download=False)
     elif context_points == "kmnist":
-        context_dataset = KMNIST(root="./data/", train=True, transform=context_transform, download=False)
+        context_dataset = KMNIST(root=data_dir, train=True, transform=context_transform, download=False)
     elif context_points == "mnist":
-        context_dataset = MNIST("./data/", train=True, download=False, transform=context_transform)
+        context_dataset = MNIST(root=data_dir, train=True, download=False, transform=context_transform)
     elif context_points == "imagenet":
-        context_dataset = ImageNet(root="./data/ImageNet", train=True, transform=context_transform, download=True)
+        context_dataset = ImageNet(root=data_dir, train=True, transform=context_transform, download=True)
     else:
         ValueError("Unknown context dataset")
     
     context_set, _ = torch.utils.data.random_split(context_dataset, [60000, 0], generator=torch.Generator().manual_seed(seed))
 
     if ood_points == "mnist":
-        ood_dataset = MNIST("./data/", train=False, download=False, transform=test_transform)
+        ood_dataset = MNIST(root=data_dir, train=False, download=False, transform=test_transform)
     elif ood_points == "kmnist":
-        ood_dataset = KMNIST(root="./data/", train=False, transform=test_transform, download=False)
+        ood_dataset = KMNIST(root=data_dir, train=False, transform=test_transform, download=False)
     else:
         ValueError("Unknown OOD dataset")
 
