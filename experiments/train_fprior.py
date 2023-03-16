@@ -87,7 +87,7 @@ parser.add_argument('--method', type=str, default='fsmap')  # fsmap, psmap, fsvi
 parser.add_argument('--reg_type', type=str, default='function_prior')  # function_prior, function_norm, parameter_norm, feature_parameter_norm, function_kl, parameter_kl
 parser.add_argument('--forward_points', type=str, default='train')
 parser.add_argument('--context_points', type=str, default='train')
-parser.add_argument("--context_transform", action="store_true", default=False)
+parser.add_argument("--context_transform", type=bool, default=False)
 parser.add_argument('--ood_points', type=str, default='')
 parser.add_argument("--mc_samples_llk", type=int, default=1)
 parser.add_argument("--mc_samples_reg", type=int, default=1)
