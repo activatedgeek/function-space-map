@@ -1,15 +1,17 @@
-import logging
 from torch.utils.data import DataLoader
 
+from fspace.nn import create_model
 from fspace.utils.logging import set_logging, wandb
 from fspace.datasets import get_dataset, get_dataset_normalization
-from fspace.scripts.evaluate import full_eval_model, compute_p_fn
+from fspace.scripts.evaluate import full_eval_model, compute_prob_fn
 
 
 def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
          dataset=None, ood_dataset=None, corr_config=None,
          batch_size=512, num_workers=4):
+    assert ckpt_path is not None, "Missing checkpoint path."
+
     wandb.config.update({
         'log_dir': log_dir,
         'seed': seed,
@@ -32,18 +34,12 @@ def main(seed=42, log_dir=None, data_dir=None,
                                           normalize=get_dataset_normalization(dataset))
         ood_test_loader = DataLoader(ood_test_data, batch_size=batch_size, num_workers=num_workers)
 
-    logging.info(f'Evaluating latest checkpoint...')
-    full_eval_model(compute_p_fn(model_name, train_data.n_classes, ckpt_path, ckpt_prefix='checkpoint_'),
+    _, model, params, extra_vars = create_model(None, model_name, train_data[0][0].numpy()[None, ...],
+                                                num_classes=train_data.n_classes, ckpt_path=ckpt_path)
+
+    full_eval_model(compute_prob_fn(model, params, extra_vars),
                     train_loader, test_loader, val_loader=val_loader, ood_loader=ood_test_loader,
                     log_prefix='s/')
-
-    try:
-        logging.info(f'Evaluating best (validation) checkpoint...')
-        full_eval_model(compute_p_fn(model_name, train_data.n_classes, ckpt_path, ckpt_prefix='best_checkpoint_'),
-                        train_loader, test_loader, val_loader=val_loader, ood_loader=ood_test_loader,
-                        log_prefix='s/best/')
-    except TypeError:
-        logging.warning('Skipping best checkpoint evaluation.')
 
 
 def entrypoint(log_dir=None, **kwargs):
