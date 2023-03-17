@@ -77,6 +77,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', type=str, default='fmnist')  # cifar10, cifar10-224, cifar100, fmnist, two-moons
 parser.add_argument('--train_subset', type=float, default=1.)
 parser.add_argument("--batch_size", type=int, default=128)
+parser.add_argument("--context_subset", type=float, default=1.)
 parser.add_argument("--context_set_size", type=int, default=128)
 parser.add_argument("--num_epochs", type=int, default=20)
 parser.add_argument("--learning_rate", type=float, default=0.005)
@@ -172,6 +173,7 @@ if config != '':
 dataset = args_dict["dataset"]
 train_subset = args_dict["train_subset"]
 batch_size = args_dict["batch_size"]
+context_subset = args_dict["context_subset"]
 context_set_size = args_dict["context_set_size"]
 num_epochs = args_dict["num_epochs"]
 learning_rate = args_dict["learning_rate"]
@@ -577,7 +579,7 @@ if dataset == 'cifar10' or dataset == 'cifar10-224':
     else:
         ValueError("Unknown context dataset")
     
-    context_set, _ = torch.utils.data.random_split(context_dataset, [len(context_dataset), 0], generator=torch.Generator().manual_seed(seed))
+    context_set, _ = torch.utils.data.random_split(context_dataset, [int(len(context_dataset) * np.abs(context_subset)), 0], generator=torch.Generator().manual_seed(seed))
 
     if ood_points == "svhn":
         ood_dataset = SVHN(root=Path(data_dir) / 'svhn', split="test", download=False, transform=test_transform)
@@ -785,7 +787,7 @@ elif dataset == 'fmnist' or dataset == 'fmnist-224':
     else:
         ValueError("Unknown context dataset")
     
-    context_set, _ = torch.utils.data.random_split(context_dataset, [len(context_dataset), 0], generator=torch.Generator().manual_seed(seed))
+    context_set, _ = torch.utils.data.random_split(context_dataset, [int(len(context_dataset) * np.abs(context_subset)), 0], generator=torch.Generator().manual_seed(seed))
 
     if ood_points == "mnist":
         ood_dataset = MNIST(root=data_dir, train=False, download=False, transform=test_transform)
