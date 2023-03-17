@@ -1573,8 +1573,10 @@ class TrainerModule:
             else:
                 raise ValueError("Unknown regularization type.")
 
-            nll = categorical_nll_with_softmax(jax.nn.softmax(logits, -1), targets).mean(0).sum()
-            loss = (nll + self.objective_hparams["reg_scale"] * reg) / self.batch_size
+            # nll = categorical_nll_with_softmax(jax.nn.softmax(logits, -1), targets).mean(0).sum()
+            # loss = (nll + self.objective_hparams["reg_scale"] * reg) / self.batch_size
+            nll = jnp.stack([optax.softmax_cross_entropy_with_integer_labels(logits[i], targets) for i in range(self.mc_samples_llk)], axis=0).mean()
+            loss = nll + self.objective_hparams["reg_scale"] * reg
             acc = 100 * (logits.argmax(axis=-1) == targets).mean()
 
             if debug_print:
