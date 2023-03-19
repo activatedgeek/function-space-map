@@ -633,7 +633,7 @@ if dataset == 'cifar10' or dataset == 'cifar10-224':
                                  persistent_workers=True)
     
 
-    cifar101test_data = get_cifar10_test(root="./data/CIFAR10", seed=seed, v1=True, corr_config=None, batch_size=batch_size_test)
+    cifar101test_data = get_cifar10_test(root=data_dir, seed=seed, v1=True, corr_config=None, batch_size=batch_size_test)
 
     cifar101test_loader  = data.DataLoader(cifar101test_data,
                                 batch_size=batch_size_test,
@@ -650,17 +650,17 @@ if dataset == 'cifar10' or dataset == 'cifar10-224':
         "gaussian_blur_1", "gaussian_blur_2", "gaussian_blur_3", "gaussian_blur_4", "gaussian_blur_5",
         ]
     ccifar10test_loader_list = []
-    for corr_config in corr_config_list:
-        ccifar10test_data = get_cifar10_test(root="./data/CIFAR10", seed=seed, v1=False, corr_config=corr_config, batch_size=batch_size_test)
+    # for corr_config in corr_config_list:
+    #     ccifar10test_data = get_cifar10_test(root=data_dir, seed=seed, v1=False, corr_config=corr_config, batch_size=batch_size_test)
 
-        ccifar10test_loader  = data.DataLoader(ccifar10test_data,
-                                    batch_size=batch_size_test,
-                                    shuffle=False,
-                                    drop_last=False,
-                                    num_workers=num_workers,
-                                    persistent_workers=persistent_workers
-                                    )
-        ccifar10test_loader_list.append(ccifar10test_loader)
+    #     ccifar10test_loader  = data.DataLoader(ccifar10test_data,
+    #                                 batch_size=batch_size_test,
+    #                                 shuffle=False,
+    #                                 drop_last=False,
+    #                                 num_workers=num_workers,
+    #                                 persistent_workers=persistent_workers
+    #                                 )
+    #     ccifar10test_loader_list.append(ccifar10test_loader)
 
 elif dataset == 'cifar100' or dataset == 'cifar100-224':
     # _train_dataset = CIFAR10(root=DATASET_PATH, train=True, download=True)
