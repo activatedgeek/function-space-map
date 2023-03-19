@@ -39,6 +39,10 @@ import jax.numpy as jnp
 import jax.scipy as jsp
 from jax import random
 from jax import jit
+from jax import config
+from jax.config import config
+# config.update("jax_debug_nans", True)
+# config.update('jax_platform_name', 'cpu')
 
 ## Flax
 import flax
@@ -71,6 +75,12 @@ from sklearn.metrics import roc_auc_score, roc_curve, auc
 from sklearn import datasets as sklearn_datasets
 import wandb
 
+from pathlib import Path
+from timm.data import create_dataset
+from torch.utils.data import Dataset, random_split
+
+## Convert from CxHxW to HxWxC for Flax.
+chw2hwc_fn = lambda img: img.permute(1, 2, 0)
 
 parser = argparse.ArgumentParser()
 
@@ -106,6 +116,7 @@ parser.add_argument("--pretrained_prior", action="store_true", default=False)
 parser.add_argument("--seed", type=int, default=0)
 parser.add_argument("--linearize", action="store_true", default=False)
 parser.add_argument("--evaluate", action="store_true", default=False)
+parser.add_argument("--full_eval", action="store_true", default=False)
 parser.add_argument("--restore_checkpoint", action="store_true", default=False)
 parser.add_argument("--debug", action="store_true", default=False)
 parser.add_argument("--debug_print", action="store_true", default=False)
@@ -117,6 +128,8 @@ parser.add_argument('--wandb_account', type=str, default='tgjr-research')
 parser.add_argument('--gpu_mem_frac', type=float, default=0)
 parser.add_argument('--config', type=str, default='')
 parser.add_argument('--config_id', type=int, default=0)
+
+# cwd = "/scratch-ssd/timner/deployment/testing/projects/function-space-variational-inference"
 
 args = parser.parse_args()
 args_dict = vars(args)
@@ -202,6 +215,7 @@ pretrained_prior = args_dict["pretrained_prior"]
 linearize = args_dict["linearize"]
 seed = args_dict["seed"]
 evaluate = args_dict["evaluate"]
+full_eval = args_dict["full_eval"]
 restore_checkpoint = args_dict["restore_checkpoint"]
 debug = args_dict["debug"]
 debug_print = args_dict["debug_print"]
@@ -493,6 +507,27 @@ class TwoMoons(torch.utils.data.Dataset):
         ret = (input, target)
         return ret
 
+def get_cifar10_test(root=None, v1=False, corr_config=None, batch_size=128, **_):
+    _TEST_TRANSFORM = [
+        transforms.ToTensor(),
+        transforms.Normalize((.4914, .4822, .4465), (.247, .243, .261)),
+        transforms.Lambda(chw2hwc_fn)
+    ]
+
+    if v1:
+        test_data = create_dataset(name='tfds/cifar10_1', root=root, split='test',
+                                    is_training=True, batch_size=batch_size,
+                                    transform=transforms.Compose(_TEST_TRANSFORM), download=True)
+    elif corr_config is not None:
+        test_data = create_dataset(f'tfds/cifar10_corrupted/{corr_config}', root=root, split='test',
+                                    is_training=True, batch_size=batch_size,
+                                    transform=transforms.Compose(_TEST_TRANSFORM), download=True)
+    else:
+        test_data = create_dataset('torch/cifar10', root=root, split='test',
+                                    transform=transforms.Compose(_TEST_TRANSFORM), download=True)
+
+    return test_data
+
 if dataset == 'cifar10' or dataset == 'cifar10-224':
     data_dir = os.environ.get('DATADIR')
     # _train_dataset = CIFAR10(root=DATASET_PATH, train=True, download=True)
@@ -596,6 +631,36 @@ if dataset == 'cifar10' or dataset == 'cifar10-224':
                                  collate_fn=numpy_collate,
                                  num_workers=4,
                                  persistent_workers=True)
+    
+
+    cifar101test_data = get_cifar10_test(root="./data/CIFAR10", seed=seed, v1=True, corr_config=None, batch_size=batch_size_test)
+
+    cifar101test_loader  = data.DataLoader(cifar101test_data,
+                                batch_size=batch_size_test,
+                                shuffle=False,
+                                drop_last=False,
+                                num_workers=num_workers,
+                                persistent_workers=persistent_workers
+                                )
+
+    corr_config_list = [
+        "speckle_noise_1", "speckle_noise_2", "speckle_noise_3", "speckle_noise_4", "speckle_noise_5",
+        "shot_noise_1", "shot_noise_2", "shot_noise_3", "shot_noise_4", "shot_noise_5",
+        "pixelate_1", "pixelate_2", "pixelate_3", "pixelate_4", "pixelate_5",
+        "gaussian_blur_1", "gaussian_blur_2", "gaussian_blur_3", "gaussian_blur_4", "gaussian_blur_5",
+        ]
+    ccifar10test_loader_list = []
+    for corr_config in corr_config_list:
+        ccifar10test_data = get_cifar10_test(root="./data/CIFAR10", seed=seed, v1=False, corr_config=corr_config, batch_size=batch_size_test)
+
+        ccifar10test_loader  = data.DataLoader(ccifar10test_data,
+                                    batch_size=batch_size_test,
+                                    shuffle=False,
+                                    drop_last=False,
+                                    num_workers=num_workers,
+                                    persistent_workers=persistent_workers
+                                    )
+        ccifar10test_loader_list.append(ccifar10test_loader)
 
 elif dataset == 'cifar100' or dataset == 'cifar100-224':
     # _train_dataset = CIFAR10(root=DATASET_PATH, train=True, download=True)
@@ -1065,8 +1130,9 @@ class TrainerModule:
                  optimizer_name : str,
                  optimizer_hparams : dict,
                  objective_hparams : dict,
+                 other_hparams: dict,
                  exmp_inputs : Any,
-                 seed : int):
+                 ):
         super().__init__()
         self.model_name = model_name
         self.model_class = model_class
@@ -1074,7 +1140,8 @@ class TrainerModule:
         self.optimizer_name = optimizer_name
         self.optimizer_hparams = optimizer_hparams
         self.objective_hparams = objective_hparams
-        self.seed = seed
+        self.seed = other_hparams["seed"]
+        self.num_epochs = other_hparams["num_epochs"]
         self.n_batches_eval = 10
         self.n_batches_eval_context = 10
         self.n_batches_eval_final = 100
@@ -1115,6 +1182,16 @@ class TrainerModule:
             "aleatoric_uncertainty_ood": [],
             "epistemic_uncertainty_ood": [],
         }
+        if full_eval:
+            if dataset == "cifar10":
+                self.logger["acc_test_cifar101"] = []
+                self.logger["acc_sel_test_cifar101"] = []
+                self.logger["nll_test_cifar101"] = []
+                self.logger["ece_test_cifar101"] = []
+                for corr_config in corr_config_list:
+                    self.logger[f"acc_test_ccifar10_{corr_config}"] = []
+                    self.logger[f"acc_test_ccifar10_{corr_config}"] = []
+                    self.logger[f"acc_sel_test_ccifar10_{corr_config}"] = []
         self.wandb_logger = []
         self.create_functions()
         self.prior_mean = objective_hparams["prior_mean"]
@@ -1667,12 +1744,88 @@ class TrainerModule:
 
                 ret = [logits_ood, None]
 
+            if type == "cifar101":
+                _logits_test = []
+                _targets_test = []
+
+                for i, (batch, batch_2) in enumerate(zip(cifar101test_loader, context_loader)):
+                    inputs_test, _targets = batch
+                    inputs_test, _targets = jnp.array(inputs_test), jnp.array(_targets)
+                    inputs_context, _ = batch_2
+                    n_context_points = inputs_context.shape[0]
+                    inputs = jnp.concatenate([inputs_test, inputs_context], axis=0)
+                    _logits_test_list = []
+                    for _ in range(mc_samples_eval):
+                        rng_key, _ = jax.random.split(rng_key)
+                        _pred = pred_fn_jit(params, params_logvar, batch_stats, inputs, rng_key)
+                        pred = _pred[:_pred.shape[0] - n_context_points]
+                        _logits_test_list.append(pred)
+                    _logits_test.append(jnp.stack(_logits_test_list, axis=0))
+                    _targets_test.append(_targets)
+                    if i == n_batches_eval:
+                        break
+                logits_test = jnp.concatenate(_logits_test, axis=1)[:, :testset_size, :]
+                targets_test = jnp.concatenate(_targets_test, axis=0)
+
+                ret = [logits_test, targets_test]
+
+            if type == "corruptedcifar10":
+                _logits_test_list_full = []
+                _targets_test_list_full = []
+
+                for ccifar10test_loader in ccifar10test_loader_list:
+                    _logits_test = []
+                    _targets_test = []
+                    for i, (batch, batch_2) in enumerate(zip(ccifar10test_loader, context_loader)):
+                        inputs_test, _targets = batch
+                        inputs_test, _targets = jnp.array(inputs_test), jnp.array(_targets)
+                        inputs_context, _ = batch_2
+                        n_context_points = inputs_context.shape[0]
+                        inputs = jnp.concatenate([inputs_test, inputs_context], axis=0)
+                        _logits_test_list = []
+                        for _ in range(mc_samples_eval):
+                            rng_key, _ = jax.random.split(rng_key)
+                            _pred = pred_fn_jit(params, params_logvar, batch_stats, inputs, rng_key)
+                            pred = _pred[:_pred.shape[0] - n_context_points]
+                            _logits_test_list.append(pred)
+                        _logits_test.append(jnp.stack(_logits_test_list, axis=0))
+                        _targets_test.append(_targets)
+                        if i == n_batches_eval:
+                            break
+                    logits_test = jnp.concatenate(_logits_test, axis=1)[:, :testset_size, :]
+                    targets_test = jnp.concatenate(_targets_test, axis=0)[:testset_size]
+                    _logits_test_list_full.append(logits_test)
+                    _targets_test_list_full.append(targets_test)
+
+                ret = [_logits_test_list_full, _targets_test_list_full]
+
             return ret
 
-        def calculate_metrics(params, params_logvar, rng_key, batch_stats, n_batches_eval):
+        def calculate_metrics(params, params_logvar, rng_key, batch_stats, n_batches_eval, full_eval):
             logits_test, targets_test = self.evaluation_predictions(params, params_logvar, rng_key, batch_stats, n_batches_eval, "test")
             logits_context, _ = self.evaluation_predictions(params, params_logvar, rng_key, batch_stats, n_batches_eval, "context")
             logits_ood, _ = self.evaluation_predictions(params, params_logvar, rng_key, batch_stats, n_batches_eval, "ood")
+
+            if full_eval:
+                if dataset == "cifar10":
+                    logits_cifar101, targets_cifar101 = self.evaluation_predictions(params, params_logvar, rng_key, batch_stats, n_batches_eval, "cifar101")
+                    logits_ccifar10_list, targets_ccifar10_list = self.evaluation_predictions(params, params_logvar, rng_key, batch_stats, n_batches_eval, "corruptedcifar10")
+
+                    acc_test_cifar101 = 100 * np.array(np.mean(jax.nn.softmax(logits_cifar101, axis=-1).mean(0).argmax(axis=-1) == targets_cifar101))
+                    acc_sel_test_cifar101 = selective_accuracy(jax.nn.softmax(logits_cifar101, axis=-1).mean(0), targets_cifar101)
+                    nll_test_cifar101 = jax.device_get(categorical_nll_with_softmax(jax.nn.softmax(logits_cifar101, -1).mean(0), targets_cifar101).mean())
+                    ece_test_cifar101 = 100 * calibration(jax.nn.one_hot(targets_cifar101, self.num_classes), jax.nn.softmax(logits_cifar101, axis=-1).mean(0))[0]
+
+                    self.logger["acc_test_cifar101"].append(acc_test_cifar101)
+                    self.logger["acc_sel_test_cifar101"].append(acc_sel_test_cifar101)
+                    self.logger["nll_test_cifar101"].append(nll_test_cifar101)
+                    self.logger["ece_test_cifar101"].append(ece_test_cifar101)
+
+                    for i, corr_config in enumerate(corr_config_list):
+                        acc_test_ccifar10 = 100 * np.array(np.mean(jax.nn.softmax(logits_ccifar10_list[i], axis=-1).mean(0).argmax(axis=-1) == targets_ccifar10_list[i]))
+                        acc_sel_test_ccifar10 = selective_accuracy(jax.nn.softmax(logits_ccifar10_list[i], axis=-1).mean(0), targets_ccifar10_list[i])
+                        self.logger[f"acc_test_ccifar10_{corr_config}"].append(acc_test_ccifar10)
+                        self.logger[f"acc_sel_test_ccifar10_{corr_config}"].append(acc_sel_test_ccifar10)
 
             acc_test = 100 * np.array(np.mean(jax.nn.softmax(logits_test, axis=-1).mean(0).argmax(axis=-1) == targets_test))
             acc_sel_test = selective_accuracy(jax.nn.softmax(logits_test, axis=-1).mean(0), targets_test)
@@ -1727,8 +1880,8 @@ class TrainerModule:
             state = state.apply_gradients(grads=freeze({"params": grads, "params_logvar": grads_logvar}), batch_stats=new_model_state['batch_stats'])
             return state, loss, acc
 
-        def eval_step(state, rng_key, n_batches_eval):
-            calculate_metrics(state.params["params"], state.params["params_logvar"], rng_key, state.batch_stats, n_batches_eval)
+        def eval_step(state, rng_key, n_batches_eval, full_eval):
+            calculate_metrics(state.params["params"], state.params["params_logvar"], rng_key, state.batch_stats, n_batches_eval, full_eval)
 
         self.train_step = jax.jit(train_step)
         self.evaluation_predictions = evaluation_predictions
@@ -1925,8 +2078,8 @@ class TrainerModule:
             avg_val = np.stack(jax.device_get(metrics[key])).mean()
             self.logger[f"{key}_train"].append(avg_val)
 
-    def eval_model(self, rng_key, n_batches_eval):
-        self.eval_step(self.state, rng_key, n_batches_eval)
+    def eval_model(self, rng_key, n_batches_eval, full_eval=False):
+        self.eval_step(self.state, rng_key, n_batches_eval, full_eval)
 
     def save_model(self, step=0, best=False):
         if best:
@@ -1979,7 +2132,9 @@ class TrainerModule:
             if "Pretrained" in self.model_name and not restore_checkpoint:
                 state_dict = self.model.init(rng_key, jnp.ones((1, 224, 224, 3)))
             else:
-                ckpt_path = "/scratch-ssd/timner/deployment/testing/projects/function-space-variational-inference/checkpoints/fsvi_function_kl_200_Pretrained Mean_1_0.005_0.05_50_train_ResNet18-Pretrained_cifar10-224_50/checkpoint_50"
+                # ckpt_path = "/scratch-ssd/timner/deployment/testing/projects/function-space-variational-inference/checkpoints/fsvi_function_kl_200_Pretrained Mean_1_0.005_0.05_50_train_ResNet18-Pretrained_cifar10-224_50/checkpoint_50"
+                ckpt_path = f"/scratch-ssd/timner/deployment/testing/projects/function-space-variational-inference/checkpoints/fsvi_function_kl_10_0_1_0.005_0.05_200_cifar100_ResNet18_cifar10_{self.seed}_200/checkpoint_200"
+                # ckpt_path = f"/scratch-ssd/timner/deployment/testing/projects/function-space-variational-inference/checkpoints/fsvi_function_kl_10_0_1_0.005_0.05_200_train_ResNet18_cifar10_{self.seed}_200/checkpoint_200"
                 state_dict = checkpoints.restore_checkpoint(ckpt_dir=ckpt_path, target=None)
                 # state_dict = checkpoints.restore_checkpoint(ckpt_dir=os.path.join(CHECKPOINT_PATH, f'{self.model_name}.ckpt'), target=None)
             
@@ -2018,7 +2173,7 @@ class TrainerModule:
         return os.path.isfile(os.path.join(CHECKPOINT_PATH, f'{self.model_name}.ckpt'))
 
 
-def train_classifier(*args, num_epochs, rng_key, **kwargs):
+def train_classifier(*args, rng_key, **kwargs):
     trainer = TrainerModule(*args, **kwargs)
     del kwargs['exmp_inputs']
 
@@ -2044,25 +2199,35 @@ def train_classifier(*args, num_epochs, rng_key, **kwargs):
         prior = False
 
     if train and not load_checkpoint:  # train from scratch
-        trainer.train_model(train_loader, context_loader, val_loader, rng_key, num_epochs=num_epochs)
+        trainer.train_model(train_loader, context_loader, val_loader, rng_key, num_epochs=trainer.num_epochs)
     elif train and load_checkpoint:  # load trained model and continue training
         trainer.load_model(stochastic=trainer.stochastic, pretrained_prior=trainer.pretrained_prior, restore_checkpoint=restore_checkpoint)
-        trainer.train_model(train_loader, context_loader, val_loader, rng_key, num_epochs=num_epochs)
+        trainer.train_model(train_loader, context_loader, val_loader, rng_key, num_epochs=trainer.num_epochs)
     else:  # load trained model and evaluate
         trainer.load_model(stochastic=trainer.stochastic, pretrained_prior=trainer.pretrained_prior, restore_checkpoint=restore_checkpoint)
         trainer.logger['acc_train'].append(0)
+        trainer.logger['acc_test_best'].append(0)
+        trainer.logger['loss_train'].append(0)
+        trainer.logger['epoch'].append(trainer.num_epochs)
 
     if dataset != "two-moons":
         # val_acc = trainer.eval_model(val_loader, rng_key)
-        trainer.eval_model(rng_key, trainer.n_batches_eval_final)
+        trainer.eval_model(rng_key, trainer.n_batches_eval_final, full_eval=full_eval)
         # print(f"\nValidation Accuracy: {val_acc*100:.2f}")
         print(f"Train Accuracy: {trainer.logger['acc_train'][-1]:.2f}  |  Test Accuracy: {trainer.logger['acc_test'][-1]:.2f}  |  Selective Accuracy: {trainer.logger['acc_sel_test'][-1]:.2f}  |  Selective Accuracy Test+OOD: {trainer.logger['acc_sel_test_ood'][-1]:.2f}  |  NLL: {trainer.logger['nll_test'][-1]:.3f}  |  Test ECE: {trainer.logger['ece_test'][-1]:.2f}  |  OOD AUROC: {trainer.logger['ood_auroc_entropy'][-1]:.2f} / {trainer.logger['ood_auroc_aleatoric'][-1]:.2f} / {trainer.logger['ood_auroc_epistemic'][-1]:.2f}  |  Uncertainty Test: {trainer.logger['predictive_entropy_test'][-1]:.3f} / {trainer.logger['aleatoric_uncertainty_test'][-1]:.3f} / {trainer.logger['epistemic_uncertainty_test'][-1]:.3f}  |  Uncertainty Context: {trainer.logger['predictive_entropy_context'][-1]:.3f} / {trainer.logger['aleatoric_uncertainty_context'][-1]:.3f} / {trainer.logger['epistemic_uncertainty_context'][-1]:.3f}  |  Uncertainty OOD: {trainer.logger['predictive_entropy_ood'][-1]:.3f} / {trainer.logger['aleatoric_uncertainty_ood'][-1]:.3f} / {trainer.logger['epistemic_uncertainty_ood'][-1]:.3f}")
         
         if save_to_wandb:
-            trainer.wandb_logger.append({})
-            for item in trainer.logger.items():
-                trainer.wandb_logger[-1][item[0]] = item[1][-1]
-            wandb.log(trainer.wandb_logger[-1])
+            if evaluate:
+                trainer.wandb_logger.append({})
+                for item in trainer.logger.items():
+                    trainer.wandb_logger[-1][item[0]] = item[1][-1]
+                wandb.log(trainer.wandb_logger[-1])
+                wandb.log(trainer.logger)
+            else:
+                trainer.wandb_logger.append({})
+                for item in trainer.logger.items():
+                    trainer.wandb_logger[-1][item[0]] = item[1][-1]
+                wandb.log(trainer.wandb_logger[-1])
             time.sleep(10)
             wandb.finish()
     
@@ -3104,11 +3269,18 @@ resnet_trainer, resnet_results = train_classifier(
                         "prior_feature_logvar": prior_feature_logvar,
                         "pretrained_prior": pretrained_prior,
                         },
+    other_hparams={
+                    "evaluate": evaluate,
+                    "dataset": dataset,
+                    "batch_size": batch_size,
+                    "context_set_size": context_set_size,
+                    "num_epochs": num_epochs,
+                    "seed": seed,
+                    "mc_samples_eval": mc_samples_eval,
+                    },
     exmp_inputs=jax.device_put(
         next(iter(train_loader))[0]),
-    num_epochs=num_epochs,
     rng_key=rng_key,
-    seed=seed,
     )
 
 
