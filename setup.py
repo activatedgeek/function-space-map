@@ -35,6 +35,6 @@ setup(
         'notebooks',
         'notebooks.*',
     ]),
-    python_requires='>=3.9<3.11',
+    python_requires='>=3.9,<3.11',
     install_requires=requirements,
     extras_require={})

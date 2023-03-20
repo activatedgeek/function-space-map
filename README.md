@@ -10,7 +10,7 @@ conda env create -f environment.yml -n <env_name>
 Install CUDA-compiled PyTorch version from [here](https://pytorch.org). The codebase
 has been tested with PyTorch version `1.13`.
 ```shell
-pip install 'torch<1.14' torchvision --extra-index-url https://download.pytorch.org/whl/cu116
+pip install 'torch<2.0' torchvision --extra-index-url https://download.pytorch.org/whl/cu118
 ```
 
 Install CUDA-compiled JAX version from [here](https://github.com/google/jax#installation). The

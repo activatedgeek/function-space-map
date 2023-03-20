@@ -37,19 +37,18 @@ def train_step_fn(state, X, Y, X_ctx, f_prior_std=1., jitter=1e-4):
 
         reg_loss = - jnp.mean(f_dist.log_prob(logits.T))
 
-        total_loss = loss + reg_loss
+        batch_loss = loss + reg_loss
 
-        return total_loss, new_state
+        return batch_loss, { 'state': new_state, 'ce_loss': loss, 'reg_loss': reg_loss }
 
-    (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params, **state.extra_vars)
+    (batch_loss, loss_dict), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params, **state.extra_vars)
+
+    new_state = loss_dict.get('state')
+    loss_dict.pop('state')
 
     final_state = state.apply_gradients(grads=grads, **new_state)
 
-    step_metrics = {
-        'batch_loss': loss,
-    }
-
-    return final_state, step_metrics
+    return final_state, { 'batch_loss': batch_loss, **loss_dict }
 
 
 def train_model(state, loader, step_fn, ctx_loader=None, log_dir=None, epoch=None):
@@ -66,6 +65,7 @@ def train_model(state, loader, step_fn, ctx_loader=None, log_dir=None, epoch=Non
         if log_dir is not None and i % 100 == 0:
             step_metrics = { k: v.item() for k, v in step_metrics.items() }
             logging.info({ 'epoch': epoch, **step_metrics }, extra=dict(metrics=True, prefix='train'))
+            logging.debug({ 'epoch': epoch, **step_metrics })
 
     return state
 
@@ -75,6 +75,7 @@ def main(seed=42, log_dir=None, data_dir=None,
          dataset=None, ood_dataset=None, ctx_dataset=None,
          train_subset=1.,
          batch_size=128, num_workers=4,
+         f_prior_std=1., jitter=1e-4,
          optimizer_type='sgd', lr=.1, alpha=0., momentum=.9, reg_scale=0., epochs=0):
     
     wandb.config.update({
@@ -93,6 +94,8 @@ def main(seed=42, log_dir=None, data_dir=None,
         'momentum': momentum,
         'reg_scale': reg_scale,
         'epochs': epochs,
+        'f_prior_std': f_prior_std,
+        'jitter': jitter,
     })
 
     rng = jax.random.PRNGKey(seed)
@@ -128,7 +131,8 @@ def main(seed=42, log_dir=None, data_dir=None,
         **init_vars,
         tx=optimizer)
 
-    train_fn = lambda *args, **kwargs: train_model(*args, train_step_fn, **kwargs)
+    step_fn = lambda *args: train_step_fn(*args, f_prior_std=f_prior_std, jitter=jitter)
+    train_fn = lambda *args, **kwargs: train_model(*args, step_fn, **kwargs)
 
     for e in tqdm(range(epochs)):
         train_state = train_fn(train_state, train_loader, ctx_loader=context_loader,
