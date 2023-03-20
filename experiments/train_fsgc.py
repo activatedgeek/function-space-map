@@ -100,8 +100,8 @@ def main(seed=42, log_dir=None, data_dir=None,
 
     rng = jax.random.PRNGKey(seed)
 
-    train_data, val_data, test_data = get_dataset(
-        dataset, root=data_dir, seed=seed, train_subset=train_subset)
+    train_data, val_data, test_data = get_dataset(dataset, root=data_dir, seed=seed,
+                                                  train_subset=train_subset)
     train_loader = DataLoader(train_data, batch_size=batch_size, num_workers=num_workers,
                               shuffle=True)
     val_loader = DataLoader(val_data, batch_size=batch_size, num_workers=num_workers) if val_data is not None else None
@@ -109,7 +109,8 @@ def main(seed=42, log_dir=None, data_dir=None,
 
     context_loader = None
     if ctx_dataset is not None:
-        context_data, _, _ = get_dataset(ctx_dataset, root=data_dir, seed=seed)
+        context_data, _, _ = get_dataset(ctx_dataset, root=data_dir, seed=seed,
+                                         normalize=get_dataset_normalization(dataset))
         context_loader = DataLoader(context_data, batch_size=batch_size, num_workers=num_workers,
                                   shuffle=True)
             
