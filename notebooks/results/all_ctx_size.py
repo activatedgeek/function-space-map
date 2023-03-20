@@ -43,3 +43,5 @@ sigma.sel_acc = sigma.sel_acc.round(1)
 sigma.nll = sigma.nll.round(2)
 sigma.ece = sigma.ece.round(1)
 sigma.ood_auroc = sigma.ood_auroc.round(1)
+
+(mu.astype(str) + r' $\pm$ ' + sigma.astype(str))#.reset_index().to_markdown('tmp.md', index=False)
