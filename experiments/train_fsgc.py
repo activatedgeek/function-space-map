@@ -30,7 +30,7 @@ def train_step_fn(state, X, Y, X_ctx, f_prior_std=1., jitter=1e-4):
 
         phi = jax.lax.stop_gradient(intermediates['features'][0])
 
-        f_h_cov = jnp.matmul(phi * f_prior_std**2, phi.T)
+        f_h_cov = f_prior_std**2 * jnp.matmul(phi, phi.T)
         f_h_cov = f_h_cov + f_prior_std**2 * jnp.ones_like(f_h_cov) + jitter * jnp.eye(f_h_cov.shape[0])
         f_dist = distrax.MultivariateNormalFullCovariance(
             loc=jnp.zeros(f_h_cov.shape[0]), covariance_matrix=f_h_cov)
@@ -120,7 +120,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     if optimizer_type == 'sgd':
         optimizer = optax.chain(
             optax.add_decayed_weights(reg_scale),
-            optax.clip_by_global_norm(10.),
+            # optax.clip_by_global_norm(10.),
             optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader), alpha) if epochs else lr, momentum=momentum),
         )
     else:
