@@ -17,7 +17,7 @@ from fspace.scripts.evaluate import \
 
 
 @jax.jit
-def train_step_fn(state, X, Y, X_ctx, f_prior_std=1., jitter=1e-4):
+def train_step_fn(state, X, Y, X_ctx, prior_std=1., reg_coef=1., jitter=1e-4):
     def loss_fn(params, **extra_vars):
         X_in = X if X_ctx is None else jnp.concatenate([X, X_ctx], axis=0)
 
@@ -30,14 +30,14 @@ def train_step_fn(state, X, Y, X_ctx, f_prior_std=1., jitter=1e-4):
 
         phi = jax.lax.stop_gradient(intermediates['features'][0])
 
-        f_h_cov = f_prior_std**2 * jnp.matmul(phi, phi.T)
-        f_h_cov = f_h_cov + f_prior_std**2 * jnp.ones_like(f_h_cov) + jitter * jnp.eye(f_h_cov.shape[0])
+        f_h_cov = prior_std**2 * jnp.matmul(phi, phi.T)
+        f_h_cov = f_h_cov + prior_std**2 * jnp.ones_like(f_h_cov) + jitter * jnp.eye(f_h_cov.shape[0])
         f_dist = distrax.MultivariateNormalFullCovariance(
             loc=jnp.zeros(f_h_cov.shape[0]), covariance_matrix=f_h_cov)
 
         reg_loss = - jnp.mean(f_dist.log_prob(logits.T))
 
-        batch_loss = loss + reg_loss
+        batch_loss = loss + reg_coef * reg_loss
 
         return batch_loss, { 'state': new_state, 'ce_loss': loss, 'reg_loss': reg_loss }
 
@@ -75,8 +75,8 @@ def main(seed=42, log_dir=None, data_dir=None,
          dataset=None, ood_dataset=None, ctx_dataset=None,
          train_subset=1.,
          batch_size=128, num_workers=4,
-         f_prior_std=1., jitter=1e-4,
-         optimizer_type='sgd', lr=.1, alpha=0., momentum=.9, reg_scale=0., epochs=0):
+         f_prior_std=1., jitter=1e-4, f_reg_coef=1.,
+         optimizer_type='sgd', lr=.1, alpha=0., momentum=.9, weight_decay=0., epochs=0):
     
     wandb.config.update({
         'log_dir': log_dir,
@@ -92,9 +92,10 @@ def main(seed=42, log_dir=None, data_dir=None,
         'lr': lr,
         'alpha': alpha,
         'momentum': momentum,
-        'reg_scale': reg_scale,
+        'weight_decay': weight_decay,
         'epochs': epochs,
         'f_prior_std': f_prior_std,
+        'f_reg_coef': f_reg_coef,
         'jitter': jitter,
     })
 
@@ -119,8 +120,7 @@ def main(seed=42, log_dir=None, data_dir=None,
 
     if optimizer_type == 'sgd':
         optimizer = optax.chain(
-            optax.add_decayed_weights(reg_scale),
-            # optax.clip_by_global_norm(10.),
+            optax.add_decayed_weights(weight_decay),
             optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader), alpha) if epochs else lr, momentum=momentum),
         )
     else:
@@ -132,7 +132,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         **init_vars,
         tx=optimizer)
 
-    step_fn = lambda *args: train_step_fn(*args, f_prior_std=f_prior_std, jitter=jitter)
+    step_fn = lambda *args: train_step_fn(*args, prior_std=f_prior_std, reg_coef=f_reg_coef, jitter=jitter)
     train_fn = lambda *args, **kwargs: train_model(*args, step_fn, **kwargs)
 
     for e in tqdm(range(epochs)):

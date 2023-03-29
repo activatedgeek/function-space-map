@@ -25,7 +25,7 @@ def train_step_fn(state, b_X, b_Y):
                                             mutable=['batch_stats'], train=True)
 
         loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logits, b_Y))
-        # loss = loss + reg_scale * sum([jnp.vdot(p, p) for p in jax.tree_util.tree_leaves(params)]) / 2
+        # loss = loss + weight_decay * sum([jnp.vdot(p, p) for p in jax.tree_util.tree_leaves(params)]) / 2
 
         return loss, new_state
 
@@ -58,7 +58,7 @@ def main(seed=42, log_dir=None, data_dir=None,
          dataset=None, ood_dataset=None,
          train_subset=1., label_noise=0.,
          batch_size=128, num_workers=4,
-         optimizer_type='sgd', lr=.1, alpha=0., momentum=.9, reg_scale=0., epochs=0,
+         optimizer_type='sgd', lr=.1, alpha=0., momentum=.9, weight_decay=0., epochs=0,
          swa_epochs=0, swa_lr=0.05, swag_rank=0, swag_samples=0):
     
     ## SWA updates every epoch.
@@ -78,7 +78,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         'lr': lr,
         'alpha': alpha,
         'momentum': momentum,
-        'reg_scale': reg_scale,
+        'weight_decay': weight_decay,
         'epochs': epochs,
         'swa_epochs': swa_epochs,
         'swa_lr': swa_lr,
@@ -100,7 +100,7 @@ def main(seed=42, log_dir=None, data_dir=None,
 
     if optimizer_type == 'sgd':
         optimizer = optax.chain(
-            optax.add_decayed_weights(reg_scale),
+            optax.add_decayed_weights(weight_decay),
             optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader), alpha) if epochs else lr, momentum=momentum),
         )
     else:
@@ -130,7 +130,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     ## Re-init optimizer for SWA.
     if optimizer_type == 'sgd':
         optimizer = optax.chain(
-            optax.add_decayed_weights(reg_scale),
+            optax.add_decayed_weights(weight_decay),
             optax.sgd(learning_rate=swa_lr, momentum=momentum),
             swag(len(train_loader), swag_rank),
         )
