@@ -95,8 +95,9 @@ def main(seed=42, log_dir=None, data_dir=None,
     val_loader = DataLoader(val_data, batch_size=batch_size, num_workers=num_workers) if val_data is not None else None
     test_loader = DataLoader(test_data, batch_size=batch_size, num_workers=num_workers)
 
-    rng, model, init_params, init_vars = create_model(rng, model_name, train_data[0][0].numpy()[None, ...],
-                                                      num_classes=train_data.n_classes, ckpt_path=ckpt_path)
+    rng, model_rng = jax.random.split(rng)
+    model, init_params, init_vars = create_model(model_rng, model_name, train_data[0][0].numpy()[None, ...],
+                                                 num_classes=train_data.n_classes, ckpt_path=ckpt_path)
 
     if optimizer_type == 'sgd':
         optimizer = optax.chain(

@@ -40,8 +40,7 @@ def create_model(rng, model_name, sample_input, num_classes=10,
         init_vars = freeze(checkpoints.restore_checkpoint(ckpt_dir=ckpt_path, target=None, prefix=ckpt_prefix))
         logging.info(f'Loaded checkpoint from "{ckpt_path}".')
     else:
-        rng, model_init_rng = jax.random.split(rng)
-        init_vars = model.init(model_init_rng, sample_input)
+        init_vars = model.init(rng, sample_input)
     other_vars, params = init_vars.pop('params')
 
-    return rng, model, params, other_vars
+    return model, params, other_vars

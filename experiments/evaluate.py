@@ -34,8 +34,8 @@ def main(seed=42, log_dir=None, data_dir=None,
                                           normalize=get_dataset_normalization(dataset))
         ood_test_loader = DataLoader(ood_test_data, batch_size=batch_size, num_workers=num_workers)
 
-    _, model, params, extra_vars = create_model(None, model_name, train_data[0][0].numpy()[None, ...],
-                                                num_classes=train_data.n_classes, ckpt_path=ckpt_path)
+    model, params, extra_vars = create_model(None, model_name, train_data[0][0].numpy()[None, ...],
+                                             num_classes=train_data.n_classes, ckpt_path=ckpt_path)
 
     full_eval_model(compute_prob_fn(model, params, extra_vars),
                     train_loader, test_loader, val_loader=val_loader, ood_loader=ood_test_loader,
