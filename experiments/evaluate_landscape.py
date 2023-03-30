@@ -1,4 +1,5 @@
 import logging
+from functools import partial
 from pathlib import Path
 from torch.utils.data import DataLoader
 import jax
@@ -11,6 +12,7 @@ from fspace.utils.logging import set_logging, wandb
 from fspace.datasets import get_dataset
 
 
+@partial(jax.jit, static_argnames=['std', 'step_lim', 'n_steps'])
 def perturb_params(key, params, std=1., step_lim=1., n_steps=10):
 
     def _sample(key, p):
@@ -33,10 +35,12 @@ def compute_loss_fn(rng, model, params, extra_vars, step_lim, n_directions, n_st
     """Returns function that computes loss data loader.
     """
 
+    @jax.jit
     def model_fn(params, X):
         return model.apply({ 'params': params, **extra_vars }, X, mutable=False, train=False)
     pmap_model_fn = jax.pmap(jax.vmap(model_fn, in_axes=(0, None)), in_axes=(0, None))
     
+    @jax.jit
     def loss_fn(logits, Y):
         return optax.softmax_cross_entropy_with_integer_labels(logits, Y)
     pmap_loss_fn = jax.pmap(jax.vmap(loss_fn, in_axes=(0, None)), in_axes=(0, None))
@@ -65,8 +69,8 @@ def compute_loss_fn(rng, model, params, extra_vars, step_lim, n_directions, n_st
 def main(seed=None, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
          dataset=None,
-         batch_size=512, num_workers=4,
-         step_lim=20., n_directions=1, n_steps=25):
+         batch_size=128, num_workers=4,
+         step_lim=20., n_directions=1, n_steps=20):
     assert ckpt_path is not None, "Missing checkpoint path."
 
     wandb.config.update({
@@ -81,17 +85,22 @@ def main(seed=None, log_dir=None, data_dir=None,
         'n_steps': n_steps,
     })
 
-    _, val_data, _ = get_dataset(dataset, root=data_dir, seed=seed)
-    val_loader = DataLoader(val_data, batch_size=batch_size, num_workers=num_workers) if val_data is not None else None
+    _, _, test_data = get_dataset(dataset, root=data_dir, seed=seed)
+    test_loader = DataLoader(test_data, batch_size=batch_size, num_workers=num_workers) if test_data is not None else None
 
-    model, params, extra_vars = create_model(None, model_name, val_data[0][0].numpy()[None, ...],
-                                             num_classes=val_data.n_classes, ckpt_path=ckpt_path)
+    model, params, extra_vars = create_model(None, model_name, test_data[0][0].numpy()[None, ...],
+                                             num_classes=test_data.n_classes, ckpt_path=ckpt_path)
+
+    ## Remove extraneous keys.
+    for k in extra_vars.keys():
+        if k not in ['batch_stats']:
+            extra_vars, _ = extra_vars.pop(k)
 
     rng = jax.random.PRNGKey(seed)
     rng, direction_rng = jax.random.split(rng)
     
     rnd_directions_loss = compute_loss_fn(direction_rng, model, params, extra_vars,
-                                          step_lim, n_directions, n_steps)(val_loader)   ## n_directions x n_steps
+                                          step_lim, n_directions, n_steps)(test_loader)   ## n_directions x n_steps
 
     if jax.process_index() == 0:
         with open(Path(log_dir) / f'results.npz', 'wb') as f:
