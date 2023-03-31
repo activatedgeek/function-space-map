@@ -1684,8 +1684,13 @@ class TrainerModule:
             if type == "test":
                 _logits_test = []
                 _targets_test = []
-
-                for i, (batch, batch_2) in enumerate(zip(test_loader, context_loader)):
+                context_iter = context_loader.__iter__()
+                for i, batch in enumerate(test_loader):
+                    try:
+                        batch_2 = next(context_iter)
+                    except StopIteration:
+                        context_iter = context_loader.__iter__()
+                        batch_2 = next(context_iter)
                     inputs_test, _targets = batch
                     inputs_context, _ = batch_2
                     n_context_points = inputs_context.shape[0]
@@ -1726,7 +1731,13 @@ class TrainerModule:
 
             elif type == "ood":
                 _logits_ood = []
-                for i, (batch, batch_2) in enumerate(zip(ood_loader, context_loader)):
+                context_iter = context_loader.__iter__()
+                for i, batch in enumerate(ood_loader):
+                    try:
+                        batch_2 = next(context_iter)
+                    except StopIteration:
+                        context_iter = context_loader.__iter__()
+                        batch_2 = next(context_iter)
                     inputs_ood, _ = batch
                     inputs_context, _ = batch_2
                     n_context_points = inputs_context.shape[0]
@@ -1747,8 +1758,13 @@ class TrainerModule:
             if type == "cifar101":
                 _logits_test = []
                 _targets_test = []
-
-                for i, (batch, batch_2) in enumerate(zip(cifar101test_loader, context_loader)):
+                context_iter = context_loader.__iter__()
+                for i, batch in enumerate(cifar101test_loader):
+                    try:
+                        batch_2 = next(context_iter)
+                    except StopIteration:
+                        context_iter = context_loader.__iter__()
+                        batch_2 = next(context_iter)
                     inputs_test, _targets = batch
                     inputs_test, _targets = jnp.array(inputs_test), jnp.array(_targets)
                     inputs_context, _ = batch_2
@@ -1776,7 +1792,13 @@ class TrainerModule:
                 for ccifar10test_loader in ccifar10test_loader_list:
                     _logits_test = []
                     _targets_test = []
-                    for i, (batch, batch_2) in enumerate(zip(ccifar10test_loader, context_loader)):
+                    context_iter = context_loader.__iter__()
+                    for i, batch in enumerate(ccifar10test_loader):
+                        try:
+                            batch_2 = next(context_iter)
+                        except StopIteration:
+                            context_iter = context_loader.__iter__()
+                            batch_2 = next(context_iter)
                         inputs_test, _targets = batch
                         inputs_test, _targets = jnp.array(inputs_test), jnp.array(_targets)
                         inputs_context, _ = batch_2
@@ -1979,7 +2001,13 @@ class TrainerModule:
                 
                 else:  # two-moons                                     
                     _logits_sample_test = []
-                    for i, (batch, batch_2) in enumerate(zip(test_loader, context_loader)):
+                    context_iter = context_loader.__iter__()
+                    for i, batch in enumerate(test_loader):
+                        try:
+                            batch_2 = next(context_iter)
+                        except StopIteration:
+                            context_iter = context_loader.__iter__()
+                            batch_2 = next(context_iter)
                         inputs_test, _targets = batch
                         inputs_context, _ = batch_2
                         n_context_points = inputs_context.shape[0]
@@ -2065,8 +2093,13 @@ class TrainerModule:
         data_loader = tqdm(train_loader, leave=False)
         train_acc = 0
         elapsed = 0
+        context_iter = context_loader.__iter__()
         for batch in data_loader:
-            batch_context = next(context_loader.__iter__())
+            try:
+                batch_context = next(context_iter)
+            except StopIteration:
+                context_iter = context_loader.__iter__()
+                batch_context = next(context_iter)
             self.state, loss, acc = self.train_step(self.state, batch, batch_context, rng_key)
             rng_key, _ = jax.random.split(rng_key)
             metrics['loss'].append(loss)

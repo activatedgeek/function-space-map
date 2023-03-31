@@ -52,12 +52,17 @@ def train_step_fn(state, X, Y, X_ctx, prior_std=1., reg_coef=1., jitter=1e-4):
 
 
 def train_model(state, loader, step_fn, ctx_loader=None, log_dir=None, epoch=None):
+    ctx_iter = ctx_loader.__iter__() if ctx_loader is not None else iter([[None, None]])
+
     for i, (X, Y) in tqdm(enumerate(loader), leave=False):
         X, Y = X.numpy(), Y.numpy()
 
-        X_ctx = None
-        if ctx_loader is not None:
-            X_ctx, _ = next(ctx_loader.__iter__())
+        try:
+            X_ctx, _ = next(ctx_iter)
+        except StopIteration:
+            ctx_iter = ctx_loader.__iter__() if ctx_loader is not None else iter([[None, None]])
+            X_ctx, _ = next(ctx_iter)
+        if X_ctx is not None:
             X_ctx = X_ctx.numpy()
 
         state, step_metrics = step_fn(state, X, Y, X_ctx)
@@ -113,7 +118,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         context_data, _, _ = get_dataset(ctx_dataset, root=data_dir, seed=seed,
                                          normalize=get_dataset_normalization(dataset))
         context_loader = DataLoader(context_data, batch_size=batch_size, num_workers=num_workers,
-                                  shuffle=True)
+                                    shuffle=True)
     
     rng, model_rng = jax.random.split(rng)
     model, init_params, init_vars = create_model(model_rng, model_name, train_data[0][0].numpy()[None, ...],

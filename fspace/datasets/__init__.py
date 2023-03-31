@@ -125,6 +125,6 @@ def get_dataset(dataset, root=None, seed=42, train_subset=1, label_noise=0, is_c
         setattr(val_data, 'n_classes', n_classes)
     setattr(test_data, 'n_classes', n_classes)
 
-    logging.info(f'Train Dataset Size: {len(train_data)};  Test Dataset Size: {len(test_data)}')
+    logging.info(f'"{dataset}" Train Size: {len(train_data)};  Test Size: {len(test_data)}')
 
     return train_data, val_data, test_data
