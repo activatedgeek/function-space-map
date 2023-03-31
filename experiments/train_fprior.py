@@ -2062,10 +2062,11 @@ class TrainerModule:
 
     def train_epoch(self, train_loader, context_loader, epoch, rng_key):
         metrics = defaultdict(list)
-        data_loader = tqdm(zip(train_loader, context_loader), leave=False)
+        data_loader = tqdm(train_loader, leave=False)
         train_acc = 0
         elapsed = 0
-        for batch, batch_context in data_loader:
+        for batch in data_loader:
+            batch_context = next(context_loader.__iter__())
             self.state, loss, acc = self.train_step(self.state, batch, batch_context, rng_key)
             rng_key, _ = jax.random.split(rng_key)
             metrics['loss'].append(loss)
