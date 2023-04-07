@@ -31,7 +31,7 @@ def perturb_params(key, params, std=1., step_lim=1., n_steps=10):
     return new_params
 
 
-def compute_loss_fn(rng, model, params, extra_vars, step_lim, n_directions, n_steps):
+def compute_loss_fn(model, batch_params, extra_vars):
     """Returns function that computes loss data loader.
     """
 
@@ -44,21 +44,17 @@ def compute_loss_fn(rng, model, params, extra_vars, step_lim, n_directions, n_st
     def loss_fn(logits, Y):
         return optax.softmax_cross_entropy_with_integer_labels(logits, Y)
     pmap_loss_fn = jax.pmap(jax.vmap(loss_fn, in_axes=(0, None)), in_axes=(0, None))
-
-    rng, *directions_rng = jax.random.split(rng, 1 + n_directions)
-    batch_step_params = jax.pmap(lambda _k: perturb_params(_k, params, step_lim=step_lim, n_steps=n_steps))(jnp.array(directions_rng))
     
     def compute_loss(loader):
         loss_list = []
         
         for X, Y in tqdm(loader, leave=False):
-            X, Y = X.numpy(), Y.numpy()
-            logits = pmap_model_fn(batch_step_params, X)
+            X, Y = X.numpy(), Y.numpy().astype(int)
+            logits = pmap_model_fn(batch_params, X)
             loss = pmap_loss_fn(logits, Y)
 
             loss_list.append(loss)
 
-        ## TODO: do we need a jax.lax?
         loss_list = jnp.concatenate(loss_list, axis=-1)
 
         return jnp.mean(loss_list, axis=-1)
@@ -97,10 +93,11 @@ def main(seed=None, log_dir=None, data_dir=None,
             extra_vars, _ = extra_vars.pop(k)
 
     rng = jax.random.PRNGKey(seed)
-    rng, direction_rng = jax.random.split(rng)
     
-    rnd_directions_loss = compute_loss_fn(direction_rng, model, params, extra_vars,
-                                          step_lim, n_directions, n_steps)(test_loader)   ## n_directions x n_steps
+    rng, *directions_rng = jax.random.split(rng, 1 + n_directions)
+    batch_params = jax.pmap(lambda _k: perturb_params(_k, params, step_lim=step_lim, n_steps=n_steps))(jnp.array(directions_rng))
+
+    rnd_directions_loss = compute_loss_fn(model, batch_params, extra_vars)(test_loader)   ## n_directions x n_steps
 
     if jax.process_index() == 0:
         with open(Path(log_dir) / f'results.npz', 'wb') as f:

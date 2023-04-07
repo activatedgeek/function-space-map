@@ -23,9 +23,9 @@ _DATASET_CFG = {
     'twomoons': {
         'n_classes': 2,
         'get_fn': get_twomoons,
-        'random_state': 137,
-        'noise': 5e-2,
-        'normalize': [[[0.49983146, 0.24929603]], [[0.87234487, 0.48621055]]], ## Update stats if random state and noise updated.
+        'seed': 0,
+        'noise': .2,
+        'normalize': ((0.,), (1.,)),
     },
     'mnist': {
         'n_classes': 10,
@@ -91,8 +91,8 @@ def get_dataset(dataset, root=None, seed=42, train_subset=1, label_noise=0, is_c
 
     root = get_data_dir(data_dir=root)
 
-    all_kwargs = { 'augment': not is_ctx, **_DATASET_CFG[dataset], **kwargs }
-    raw_data = _DATASET_CFG[dataset].get('get_fn')(root=root, seed=seed, **all_kwargs)
+    all_kwargs = { 'augment': not is_ctx, 'seed': seed, **_DATASET_CFG[dataset], **kwargs }
+    raw_data = _DATASET_CFG[dataset].get('get_fn')(root=root, **all_kwargs)
 
     ## 
     # If dataset used for context points, 

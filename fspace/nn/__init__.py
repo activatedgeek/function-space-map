@@ -3,12 +3,15 @@ import jax
 from flax.training import checkpoints
 from flax.core.frozen_dict import freeze
 
-from .mlp import MLP200
+from .mlp import MLP16_2, MLP200
 from .cnn import SmallCNN, TinyCNN
 from .third_party.resnet import ResNet9, ResNet18, ResNet50
 
 
 __MODEL_CFG = {
+    'mlp16_2': {
+        'model_cls': MLP16_2,
+    },
     'mlp200': {
         'model_cls': MLP200,
     },

@@ -12,7 +12,7 @@ class TwoMoonsDataset(Dataset):
         if split == 'train':
             self.X, self.y = make_moons(n_samples=n_samples, noise=noise, random_state=random_state)
         elif split == 'test' or split == 'context':
-            x, y = np.linspace(-3, 3, 100), np.linspace(-3, 3, 100)
+            x, y = np.linspace(-5, 5, 50), np.linspace(-5, 5, 50)
             xx, yy = np.meshgrid(x, y)
             self.X = np.array((xx.ravel(), yy.ravel())).T
             self.y = np.zeros(len(self.X))  ## Dummy
@@ -34,7 +34,7 @@ class TwoMoonsDataset(Dataset):
         return len(self.X)
 
 
-def get_twomoons(n_samples=100, normalize=None, noise=None, random_state=None, **_):
+def get_twomoons(n_samples=200, normalize=None, noise=None, seed=None, **_):
     mean, std = normalize
     mean, std = torch.Tensor(mean), torch.Tensor(std)
     _TEST_TRANSFORM = transforms.Compose([
@@ -42,7 +42,7 @@ def get_twomoons(n_samples=100, normalize=None, noise=None, random_state=None, *
         transforms.Lambda(lambda x: (x - mean) / (std + 1e-6))
     ])
 
-    train_data = TwoMoonsDataset(n_samples, split='train', noise=noise, random_state=random_state,
+    train_data = TwoMoonsDataset(n_samples, split='train', noise=noise, random_state=seed,
                                  transform=_TEST_TRANSFORM)
     test_data = TwoMoonsDataset(n_samples, split='test',
                                 transform=_TEST_TRANSFORM)
