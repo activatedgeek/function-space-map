@@ -21,7 +21,7 @@ def perturb_params(key, params, std=1., step_lim=1., n_steps=10):
         rv = rv / jnp.linalg.norm(rv)
         return tree_unflatten_fn(rv)
     
-    step_sizes = jnp.linspace(-step_lim, step_lim, 1 + n_steps) ## additional 1 gets us 0., i.e. no perturbation.
+    step_sizes = jnp.linspace(-step_lim, step_lim, 1 + n_steps) ## additional 1 gets us 0. when n_steps is even, i.e. no perturbation.
     direction = _sample(key, params)
 
     def _perturb(alpha):
@@ -81,11 +81,11 @@ def main(seed=None, log_dir=None, data_dir=None,
         'n_steps': n_steps,
     })
 
-    _, _, test_data = get_dataset(dataset, root=data_dir, seed=seed)
-    test_loader = DataLoader(test_data, batch_size=batch_size, num_workers=num_workers) if test_data is not None else None
+    train_data, *_ = get_dataset(dataset, root=data_dir, seed=seed)
+    train_loader = DataLoader(train_data, batch_size=batch_size, num_workers=num_workers) if train_data is not None else None
 
-    model, params, extra_vars = create_model(None, model_name, test_data[0][0].numpy()[None, ...],
-                                             num_classes=test_data.n_classes, ckpt_path=ckpt_path)
+    model, params, extra_vars = create_model(None, model_name, train_data[0][0].numpy()[None, ...],
+                                             num_classes=train_data.n_classes, ckpt_path=ckpt_path)
 
     ## Remove extraneous keys.
     for k in extra_vars.keys():
@@ -97,7 +97,9 @@ def main(seed=None, log_dir=None, data_dir=None,
     rng, *directions_rng = jax.random.split(rng, 1 + n_directions)
     batch_params = jax.pmap(lambda _k: perturb_params(_k, params, step_lim=step_lim, n_steps=n_steps))(jnp.array(directions_rng))
 
-    rnd_directions_loss = compute_loss_fn(model, batch_params, extra_vars)(test_loader)   ## n_directions x n_steps
+    ## TODO: update extra_vars (e.g. batchnorm stats) for each perturbation?
+
+    rnd_directions_loss = compute_loss_fn(model, batch_params, extra_vars)(train_loader)   ## n_directions x n_steps
 
     if jax.process_index() == 0:
         with open(Path(log_dir) / f'results.npz', 'wb') as f:
