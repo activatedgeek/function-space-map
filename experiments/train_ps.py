@@ -17,6 +17,17 @@ from fspace.scripts.evaluate import \
     compute_prob_fn, compute_prob_ensemble_fn, \
     compute_mutables_fn
 
+def train_model(state, loader, step_fn, log_dir=None, epoch=None):
+    for i, (X, Y) in tqdm(enumerate(loader), leave=False):
+        X, Y = X.numpy(), Y.numpy()
+
+        state, step_metrics = step_fn(state, X, Y)
+
+        if log_dir is not None and i % 100 == 0:
+            step_metrics = { k: v.item() for k, v in step_metrics.items() }
+            logging.info({ 'epoch': epoch, **step_metrics }, extra=dict(metrics=True, prefix='train'))
+
+    return state
 
 @jax.jit
 def train_step_fn(state, b_X, b_Y):
@@ -208,8 +219,8 @@ def main(seed=42, log_dir=None, data_dir=None,
                     log_prefix='s/')
 
 
-def entrypoint(log_dir=None, **kwargs):
-    log_dir, finish_logging = set_logging(log_dir=log_dir)
+def entrypoint(log_dir=None, run_name=None, **kwargs):
+    log_dir, finish_logging = set_logging(log_dir=log_dir, run_name=run_name)
 
     main(**kwargs, log_dir=log_dir)
 
