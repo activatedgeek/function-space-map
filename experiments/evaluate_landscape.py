@@ -31,14 +31,13 @@ def perturb_params(key, params, std=1., step_lim=1., n_steps=10):
     return new_params
 
 
-def compute_loss_fn(model, batch_params, extra_vars):
+def compute_loss_fn(model, batch_params, batch_extra_vars):
     """Returns function that computes loss data loader.
     """
-
     @jax.jit
-    def model_fn(params, X):
+    def model_fn(params, extra_vars, X):
         return model.apply({ 'params': params, **extra_vars }, X, mutable=False, train=False)
-    pmap_model_fn = jax.pmap(jax.vmap(model_fn, in_axes=(0, None)), in_axes=(0, None))
+    pmap_model_fn = jax.pmap(jax.vmap(model_fn, in_axes=(0, 0, None)), in_axes=(0, 0, None))
     
     @jax.jit
     def loss_fn(logits, Y):
@@ -50,7 +49,7 @@ def compute_loss_fn(model, batch_params, extra_vars):
         
         for X, Y in tqdm(loader, leave=False):
             X, Y = X.numpy(), Y.numpy().astype(int)
-            logits = pmap_model_fn(batch_params, X)
+            logits = pmap_model_fn(batch_params, batch_extra_vars, X)
             loss = pmap_loss_fn(logits, Y)
 
             loss_list.append(loss)
@@ -60,6 +59,21 @@ def compute_loss_fn(model, batch_params, extra_vars):
         return jnp.mean(loss_list, axis=-1)
 
     return compute_loss
+
+
+def compute_mutables_fn(model, batch_params, extra_vars):
+    @jax.jit
+    def model_fn(params, X):
+        # return extra_vars  ## NOTE: skip since we evaluate on train data?
+        return model.apply({ 'params': params, **extra_vars }, X, mutable=['batch_stats'], train=True)[-1]
+    pmap_model_fn = jax.pmap(jax.vmap(model_fn, in_axes=(0, None)), in_axes=(0, None))
+
+    def compute_mutables(loader):
+        for X, _ in tqdm(loader, leave=False):
+            batch_extra_vars = pmap_model_fn(batch_params, X.numpy())
+        return batch_extra_vars
+    
+    return compute_mutables
 
 
 def main(seed=None, log_dir=None, data_dir=None,
@@ -94,12 +108,11 @@ def main(seed=None, log_dir=None, data_dir=None,
 
     rng = jax.random.PRNGKey(seed)
     
+    ## n_directions x n_steps x ... where n_directions are pmap-ed and n_steps are vmap-ed.
     rng, *directions_rng = jax.random.split(rng, 1 + n_directions)
     batch_params = jax.pmap(lambda _k: perturb_params(_k, params, step_lim=step_lim, n_steps=n_steps))(jnp.array(directions_rng))
-
-    ## TODO: update extra_vars (e.g. batchnorm stats) for each perturbation?
-
-    rnd_directions_loss = compute_loss_fn(model, batch_params, extra_vars)(train_loader)   ## n_directions x n_steps
+    batch_extra_vars = compute_mutables_fn(model, batch_params, extra_vars)(train_loader)
+    rnd_directions_loss = compute_loss_fn(model, batch_params, batch_extra_vars)(train_loader)
 
     if jax.process_index() == 0:
         with open(Path(log_dir) / f'results.npz', 'wb') as f:
