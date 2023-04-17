@@ -32,23 +32,20 @@ def train_model(state, loader, step_fn, log_dir=None, epoch=None):
 @jax.jit
 def train_step_fn(state, b_X, b_Y):
     def loss_fn(params, **extra_vars):
-        logits, new_state = state.apply_fn({ 'params': params, **extra_vars }, b_X,
-                                            mutable=['batch_stats'], train=True)
+        logits, mutables = state.apply_fn({ 'params': params, **extra_vars }, b_X,
+                                          mutable=['batch_stats'], train=True)
 
         loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logits, b_Y))
         # loss = loss + weight_decay * sum([jnp.vdot(p, p) for p in jax.tree_util.tree_leaves(params)]) / 2
 
-        return loss, new_state
+        return loss, { 'mutables': mutables, 'ce_loss': loss }
 
-    (loss, new_state), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params, **state.extra_vars)
+    (_, aux), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params, **state.extra_vars)
+    mutables = aux.pop('mutables')
 
-    final_state = state.apply_gradients(grads=grads, **new_state)
+    final_state = state.apply_gradients(grads=grads, **mutables)
 
-    step_metrics = {
-        'batch_loss': loss,
-    }
-
-    return final_state, step_metrics
+    return final_state, aux
 
 
 def train_model(state, loader, step_fn, log_dir=None, epoch=None):
@@ -219,8 +216,8 @@ def main(seed=42, log_dir=None, data_dir=None,
                     log_prefix='s/')
 
 
-def entrypoint(log_dir=None, run_name=None, **kwargs):
-    log_dir, finish_logging = set_logging(log_dir=log_dir, run_name=run_name)
+def entrypoint(log_dir=None, **kwargs):
+    log_dir, finish_logging = set_logging(log_dir=log_dir)
 
     main(**kwargs, log_dir=log_dir)
 

@@ -79,11 +79,12 @@ def get_log_dir(log_dir=None):
     return log_dir
 
 
-def set_logging(log_dir=None, run_name=None, use_wandb=True, metrics_extra_key='metrics'):
+def set_logging(log_dir=None, use_wandb=True, metrics_extra_key='metrics'):
     if use_wandb:
+        ## Set other properties using environment variables: https://docs.wandb.ai/guides/track/environment-variables.
         wandb.init(
-            project='FSWAG',
-            name=run_name
+            mode=os.environ.get('WANDB_MODE', default='offline'),
+            # settings=wandb.Settings(start_method="fork"),
         )
         log_dir = Path(wandb.run.dir)
     else:

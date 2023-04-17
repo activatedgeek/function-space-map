@@ -21,12 +21,12 @@ def train_step_fn(state, X, Y, X_ctx, prior_std=1., reg_coef=1., jitter=1e-4):
     def loss_fn(params, **extra_vars):
         X_in = X if X_ctx is None else jnp.concatenate([X, X_ctx], axis=0)
 
-        logits, new_state = state.apply_fn({ 'params': params, **extra_vars }, X_in,
-                                            mutable=['batch_stats', 'intermediates'], train=True)
+        logits, mutables = state.apply_fn({ 'params': params, **extra_vars }, X_in,
+                                          mutable=['batch_stats', 'intermediates'], train=True)
 
         loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logits[:Y.shape[0]], Y))
 
-        new_state, intermediates = new_state.pop('intermediates')
+        mutables, intermediates = mutables.pop('intermediates')
 
         phi = jax.lax.stop_gradient(intermediates['features'][0])
 
@@ -39,16 +39,14 @@ def train_step_fn(state, X, Y, X_ctx, prior_std=1., reg_coef=1., jitter=1e-4):
 
         batch_loss = loss + reg_coef * reg_loss
 
-        return batch_loss, { 'state': new_state, 'ce_loss': loss, 'reg_loss': reg_loss }
+        return batch_loss, { 'mutables': mutables, 'batch_loss': batch_loss, 'ce_loss': loss, 'reg_loss': reg_loss }
 
-    (batch_loss, loss_dict), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params, **state.extra_vars)
+    (_, aux), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params, **state.extra_vars)
+    mutables = aux.pop('mutables')
 
-    new_state = loss_dict.get('state')
-    loss_dict.pop('state')
+    final_state = state.apply_gradients(grads=grads, **mutables)
 
-    final_state = state.apply_gradients(grads=grads, **new_state)
-
-    return final_state, { 'batch_loss': batch_loss, **loss_dict }
+    return final_state, aux
 
 
 def train_model(state, loader, step_fn, ctx_loader=None, log_dir=None, epoch=None):
