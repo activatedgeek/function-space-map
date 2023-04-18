@@ -41,9 +41,9 @@ def train_step_fn(rng, state, X, Y, X_ctx, laplace_std=1e-2, reg_scale=1e-4):
         perturbed_logits, _ = state.apply_fn({ 'params': perturbed_params, **extra_vars }, X_in,
                                              mutable=['batch_stats'], train=True)
 
-        reg_loss = jnp.mean(jnp.sum((perturbed_logits - logits)**2, axis=-1))
+        reg_loss = jnp.mean(jnp.sum((perturbed_logits - logits)**2, axis=-1))  / laplace_std**2
 
-        batch_loss = loss + (reg_scale / laplace_std**2) * reg_loss
+        batch_loss = loss + reg_scale * reg_loss
 
         return batch_loss, { 'mutables': mutables, 'batch_loss': batch_loss, 'ce_loss': loss, 'reg_loss': reg_loss }
 
@@ -131,7 +131,10 @@ def main(seed=42, log_dir=None, data_dir=None,
         optimizer = optax.chain(
             optax.add_decayed_weights(weight_decay),
             optax.sgd(learning_rate=optax.cosine_decay_schedule(lr, epochs * len(train_loader), alpha) if epochs else lr, momentum=momentum),
+            optax.clip_by_global_norm(1.0),
         )
+    elif optimizer_type == 'adamw':
+        optimizer = optax.adamw(learning_rate=lr, weight_decay=weight_decay)
     else:
         raise NotImplementedError
 

@@ -5,7 +5,7 @@ from flax.core.frozen_dict import freeze
 
 from .mlp import MLP16_2, MLP200
 from .cnn import SmallCNN, TinyCNN
-from .third_party.resnet import ResNet9, ResNet18, ResNet50
+from .third_party.resnet import ResNet9, ResNet18, ResNet18e, ResNet50
 
 
 __MODEL_CFG = {
@@ -20,6 +20,9 @@ __MODEL_CFG = {
     },
     'resnet18': {
         'model_cls': ResNet18,
+    },
+    'resnet18e': {
+        'model_cls': ResNet18e,
     },
     'resnet50': {
         'model_cls': ResNet50,
