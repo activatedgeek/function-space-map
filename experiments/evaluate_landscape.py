@@ -95,8 +95,8 @@ def main(seed=None, log_dir=None, data_dir=None,
         'n_steps': n_steps,
     })
 
-    train_data, *_ = get_dataset(dataset, root=data_dir, seed=seed)
-    train_loader = DataLoader(train_data, batch_size=batch_size, num_workers=num_workers) if train_data is not None else None
+    train_data, *_ = get_dataset(dataset, augment=False, root=data_dir, seed=seed)
+    train_loader = DataLoader(train_data, batch_size=batch_size, num_workers=num_workers)
 
     model, params, extra_vars = create_model(None, model_name, train_data[0][0].numpy()[None, ...],
                                              num_classes=train_data.n_classes, ckpt_path=ckpt_path)
