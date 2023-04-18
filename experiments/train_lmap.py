@@ -16,7 +16,7 @@ from fspace.scripts.evaluate import \
 
 
 @jax.jit
-def train_step_fn(rng, state, X, Y, X_ctx, laplace_std=1., jitter=1e-4):
+def train_step_fn(rng, state, X, Y, X_ctx, laplace_std=1e-2, reg_scale=1e-4):
     X_in = X if X_ctx is None else jnp.concatenate([X, X_ctx], axis=0)
 
     def tree_random_split(key, ref_tree):
@@ -41,9 +41,9 @@ def train_step_fn(rng, state, X, Y, X_ctx, laplace_std=1., jitter=1e-4):
         perturbed_logits, _ = state.apply_fn({ 'params': perturbed_params, **extra_vars }, X_in,
                                              mutable=['batch_stats'], train=True)
 
-        reg_loss = jnp.mean(jnp.sum((perturbed_logits - logits)**2, axis=-1)) / (jitter * laplace_std**2)
+        reg_loss = jnp.mean(jnp.sum((perturbed_logits - logits)**2, axis=-1))
 
-        batch_loss = loss + reg_loss
+        batch_loss = loss + (reg_scale / laplace_std**2) * reg_loss
 
         return batch_loss, { 'mutables': mutables, 'batch_loss': batch_loss, 'ce_loss': loss, 'reg_loss': reg_loss }
 
@@ -84,7 +84,7 @@ def main(seed=42, log_dir=None, data_dir=None,
          dataset=None, ood_dataset=None, ctx_dataset=None,
          train_subset=1.,
          batch_size=128, num_workers=4,
-         laplace_std=1., jitter=1e-4,
+         laplace_std=1., reg_scale=1e-4,
          optimizer_type='sgd', lr=.1, alpha=0., momentum=.9, weight_decay=0., epochs=0):
 
     wandb.config.update({
@@ -104,7 +104,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         'weight_decay': weight_decay,
         'epochs': epochs,
         'laplace_std': laplace_std,
-        'jitter': jitter,
+        'reg_scale': reg_scale,
     })
 
     rng = jax.random.PRNGKey(seed)
@@ -141,7 +141,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         **init_vars,
         tx=optimizer)
 
-    step_fn = lambda *args: train_step_fn(*args, laplace_std=laplace_std, jitter=jitter)
+    step_fn = lambda *args: train_step_fn(*args, laplace_std=laplace_std, reg_scale=reg_scale)
     train_fn = lambda *args, **kwargs: train_model(*args, step_fn, **kwargs)
 
     for e in tqdm(range(epochs)):
