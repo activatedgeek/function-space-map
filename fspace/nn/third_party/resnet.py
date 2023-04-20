@@ -77,5 +77,8 @@ ResNet18 = partial(ResNet, act_fn=nn.relu, block_class=ResNetBlock,
 ResNet18e = partial(ResNet, act_fn=nn.elu, block_class=ResNetBlock,
                    num_blocks=(2, 2, 2, 2), c_hidden=(64, 128, 256, 512))
 
+ResNet18sw = partial(ResNet, act_fn=nn.swish, block_class=ResNetBlock,
+                   num_blocks=(2, 2, 2, 2), c_hidden=(64, 128, 256, 512))
+
 ResNet50 = partial(ResNet, act_fn=nn.relu, block_class=ResNetBlock,
                    num_blocks=(3, 4, 6, 3), c_hidden=(64, 128, 256, 512))
