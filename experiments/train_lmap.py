@@ -59,6 +59,8 @@ def train_model(rng, state, loader, step_fn, ctx_loader=None, log_dir=None, epoc
     ctx_iter = ctx_loader.__iter__() if ctx_loader is not None else iter([[None, None]])
 
     for i, (X, Y) in tqdm(enumerate(loader), leave=False):
+        rng, train_rng = jax.random.split(rng)
+
         X, Y = X.numpy(), Y.numpy()
 
         try:
@@ -69,14 +71,14 @@ def train_model(rng, state, loader, step_fn, ctx_loader=None, log_dir=None, epoc
         if X_ctx is not None:
             X_ctx = X_ctx.numpy()
 
-        state, step_metrics = step_fn(rng, state, X, Y, X_ctx)
+        state, step_metrics = step_fn(train_rng, state, X, Y, X_ctx)
 
         if log_dir is not None and i % 100 == 0:
             step_metrics = { k: v.item() for k, v in step_metrics.items() }
             logging.info({ 'epoch': epoch, **step_metrics }, extra=dict(metrics=True, prefix='train'))
             logging.debug({ 'epoch': epoch, **step_metrics })
 
-    return state
+    return rng, state
 
 
 def main(seed=42, log_dir=None, data_dir=None,
@@ -148,9 +150,8 @@ def main(seed=42, log_dir=None, data_dir=None,
     train_fn = lambda *args, **kwargs: train_model(*args, step_fn, **kwargs)
 
     for e in tqdm(range(epochs)):
-        rng, train_rng = jax.random.split(rng)
-        train_state = train_fn(train_rng, train_state, train_loader, ctx_loader=context_loader,
-                               log_dir=log_dir, epoch=e)
+        rng, train_state = train_fn(rng, train_state, train_loader, ctx_loader=context_loader,
+                                    log_dir=log_dir, epoch=e)
 
         if (e + 1) % 10 == 0:
             val_metrics = cheap_eval_model(compute_prob_fn(model, train_state.params, train_state.extra_vars), val_loader or test_loader)
