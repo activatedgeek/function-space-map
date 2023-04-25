@@ -14,6 +14,7 @@ from .factory import \
     get_cifar10, \
     get_cifar100
 from .two_moons import get_twomoons
+from .whitenoise import get_white_noise
 from .third_party.aptos import get_aptos_orig
 from .third_party.cassava import get_cassava_orig
 from .third_party.melanoma import get_melanoma_orig
@@ -77,6 +78,12 @@ _DATASET_CFG = {
         'get_fn': get_melanoma_orig,
         'normalize': [(0.485, 0.456, 0.406), (0.229, 0.224, 0.225)],
     },
+    'whitenoise': {
+        'n_classes': None,
+        'seed': 2651,
+        'get_fn': get_white_noise,
+        'num_samples': 10000,
+    }
 }
 
 

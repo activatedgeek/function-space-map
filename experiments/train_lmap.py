@@ -121,7 +121,9 @@ def main(seed=42, log_dir=None, data_dir=None,
     context_loader = None
     if ctx_dataset is not None:
         context_data, _, _ = get_dataset(ctx_dataset, root=data_dir, seed=seed,
-                                         normalize=get_dataset_normalization(dataset))
+                                         normalize=get_dataset_normalization(dataset),
+                                         ref_tensor=train_data[0][0])
+
         context_loader = DataLoader(context_data, batch_size=batch_size, num_workers=num_workers,
                                     shuffle=True)
 
