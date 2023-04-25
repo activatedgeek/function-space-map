@@ -85,7 +85,7 @@ def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
          dataset=None, ood_dataset=None, ctx_dataset=None,
          train_subset=1.,
-         batch_size=128, num_workers=4,
+         batch_size=128, context_size=128, num_workers=4,
          laplace_std=1., reg_scale=1e-4,
          optimizer_type='sgd', lr=.1, alpha=0., momentum=.9, weight_decay=0., epochs=0):
 
@@ -99,6 +99,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         'ood_dataset': ood_dataset,
         'train_subset': train_subset,
         'batch_size': batch_size,
+        'context_size': context_size,
         'optimizer_type': optimizer_type,
         'lr': lr,
         'alpha': alpha,
@@ -124,7 +125,7 @@ def main(seed=42, log_dir=None, data_dir=None,
                                          normalize=get_dataset_normalization(dataset),
                                          ref_tensor=train_data[0][0])
 
-        context_loader = DataLoader(context_data, batch_size=batch_size, num_workers=num_workers,
+        context_loader = DataLoader(context_data, batch_size=context_size, num_workers=num_workers,
                                     shuffle=True)
 
     rng, model_rng = jax.random.split(rng)
