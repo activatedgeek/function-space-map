@@ -61,11 +61,13 @@ def compute_loss_fn(model, batch_params, batch_extra_vars):
     return compute_loss
 
 
-def compute_mutables_fn(model, batch_params, extra_vars):
+def compute_mutables_fn(model, batch_params, extra_vars,
+                        update_mutables=True):
     @jax.jit
     def model_fn(params, X):
-        # return extra_vars  ## NOTE: skip since we evaluate on train data?
-        return model.apply({ 'params': params, **extra_vars }, X, mutable=['batch_stats'], train=True)[-1]
+        if update_mutables:
+            return model.apply({ 'params': params, **extra_vars }, X, mutable=['batch_stats'], train=True)[-1]
+        return extra_vars
     pmap_model_fn = jax.pmap(jax.vmap(model_fn, in_axes=(0, None)), in_axes=(0, None))
 
     def compute_mutables(loader):
@@ -78,7 +80,7 @@ def compute_mutables_fn(model, batch_params, extra_vars):
 
 def main(seed=None, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
-         dataset=None,
+         dataset=None, update_mutables=False,
          batch_size=128, num_workers=4,
          step_lim=20., n_directions=1, n_steps=20):
     assert ckpt_path is not None, "Missing checkpoint path."
@@ -89,6 +91,7 @@ def main(seed=None, log_dir=None, data_dir=None,
         'model_name': model_name,
         'ckpt_path': ckpt_path,
         'dataset': dataset,
+        'update_mutables': bool(update_mutables),
         'batch_size': batch_size,
         'step_lim': step_lim,
         'n_directions': n_directions,
@@ -111,7 +114,8 @@ def main(seed=None, log_dir=None, data_dir=None,
     ## n_directions x n_steps x ... where n_directions are pmap-ed and n_steps are vmap-ed.
     rng, *directions_rng = jax.random.split(rng, 1 + n_directions)
     batch_params = jax.pmap(lambda _k: perturb_params(_k, params, step_lim=step_lim, n_steps=n_steps))(jnp.array(directions_rng))
-    batch_extra_vars = compute_mutables_fn(model, batch_params, extra_vars)(train_loader)
+    batch_extra_vars = compute_mutables_fn(model, batch_params, extra_vars,
+                                           update_mutables=bool(update_mutables))(train_loader)
     rnd_directions_loss = compute_loss_fn(model, batch_params, batch_extra_vars)(train_loader)
 
     if jax.process_index() == 0:
