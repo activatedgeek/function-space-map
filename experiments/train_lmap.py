@@ -84,7 +84,7 @@ def train_model(rng, state, loader, step_fn, ctx_loader=None, log_dir=None, epoc
 def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
          dataset=None, ood_dataset=None, ctx_dataset=None,
-         train_subset=1.,
+         augment=True, train_subset=1.,
          batch_size=128, context_size=128, num_workers=4,
          laplace_std=1., reg_scale=1e-4,
          optimizer_type='sgd', lr=.1, alpha=0., momentum=.9, weight_decay=0., epochs=0):
@@ -97,6 +97,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         'dataset': dataset,
         'ctx_dataset': ctx_dataset,
         'ood_dataset': ood_dataset,
+        'augment': bool(augment),
         'train_subset': train_subset,
         'batch_size': batch_size,
         'context_size': context_size,
@@ -113,7 +114,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     rng = jax.random.PRNGKey(seed)
 
     train_data, val_data, test_data = get_dataset(dataset, root=data_dir, seed=seed,
-                                                  train_subset=train_subset)
+                                                  augment=bool(augment), train_subset=train_subset)
     train_loader = DataLoader(train_data, batch_size=batch_size, num_workers=num_workers,
                               shuffle=True)
     val_loader = DataLoader(val_data, batch_size=batch_size, num_workers=num_workers) if val_data is not None else None
