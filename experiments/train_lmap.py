@@ -83,7 +83,7 @@ def train_model(rng, state, loader, step_fn, ctx_loader=None, log_dir=None, epoc
 def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
          dataset=None, ood_dataset=None, ctx_dataset=None,
-         augment=True, train_subset=1.,
+         augment=True, label_noise=0.,
          batch_size=128, context_size=128,
          laplace_std=1., reg_scale=1e-4,
          optimizer_type='sgd', lr=.1, alpha=0., momentum=.9, weight_decay=0., epochs=0):
@@ -97,7 +97,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         'ctx_dataset': ctx_dataset,
         'ood_dataset': ood_dataset,
         'augment': bool(augment),
-        'train_subset': train_subset,
+        'label_noise': label_noise,
         'batch_size': batch_size,
         'context_size': context_size,
         'optimizer_type': optimizer_type,
@@ -113,7 +113,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     rng = jax.random.PRNGKey(seed)
 
     train_data, val_data, test_data = get_dataset(dataset, root=data_dir, seed=seed, channels_last=True,
-                                                  augment=bool(augment), train_subset=train_subset)
+                                                  augment=bool(augment), label_noise=label_noise)
     train_loader = get_loader(train_data, batch_size=batch_size, shuffle=True)
     val_loader = get_loader(val_data, batch_size=batch_size) if val_data is not None else None
     test_loader = get_loader(test_data, batch_size=batch_size)
