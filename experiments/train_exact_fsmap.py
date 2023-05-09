@@ -1,15 +1,14 @@
 import logging
 from tqdm.auto import tqdm
-from torch.utils.data import DataLoader
 import jax
 import jax.numpy as jnp
 from flax.training import checkpoints
 import optax
 
-from fspace.utils.logging import set_logging, finish_logging, wandb
-from fspace.datasets import get_dataset
+from fspace.utils.logging import set_logging, wandb
+from fspace.datasets import get_dataset, get_dataset_attrs, get_loader
 from fspace.nn import create_model
-from fspace.utils.training import TrainState, eval_classifier
+from fspace.utils.training import TrainState
 
 def jacobian_sigular_values(jac_fn, p, x, **extra_vars):
     j = jac_fn(p, x, **extra_vars)
@@ -79,7 +78,7 @@ def train_model(state, loader, step_fn, log_dir=None, epoch=None):
 def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
          dataset=None, train_subset=1., label_noise=0.,
-         batch_size=128, num_workers=4,
+         batch_size=128,
          optimizer='sgd', lr=.1, momentum=.9, weight_decay=0., jitter=1e-5,
          epochs=0):
     wandb.config.update({
@@ -101,12 +100,11 @@ def main(seed=42, log_dir=None, data_dir=None,
 
     train_data, val_data, test_data = get_dataset(
         dataset, root=data_dir, seed=seed, train_subset=train_subset, label_noise=label_noise)
-    train_loader = DataLoader(train_data, batch_size=batch_size, num_workers=num_workers,
-                              shuffle=True)
-    val_loader = DataLoader(val_data, batch_size=batch_size, num_workers=num_workers)
-    test_loader = DataLoader(test_data, batch_size=batch_size, num_workers=num_workers)
+    train_loader = get_loader(train_data, batch_size=batch_size, shuffle=True)
+    val_loader = get_loader(val_data, batch_size=batch_size)
+    test_loader = get_loader(test_data, batch_size=batch_size)
 
-    model = create_model(model_name, num_classes=train_data.n_classes)
+    model = create_model(model_name, num_classes=get_dataset_attrs(dataset).get('num_classes'))
     if ckpt_path is not None:
         init_vars = checkpoints.restore_checkpoint(ckpt_dir=ckpt_path, target=None)
         logging.info(f'Loaded checkpoint from "{ckpt_path}".')
