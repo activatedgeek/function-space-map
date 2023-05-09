@@ -1,13 +1,12 @@
 import logging
 from tqdm.auto import tqdm
-from torch.utils.data import DataLoader
 import jax
 import jax.numpy as jnp
 from flax.training import checkpoints
 import optax
 
 from fspace.utils.logging import set_logging, wandb
-from fspace.datasets import get_dataset, get_dataset_normalization
+from fspace.datasets import get_dataset, get_dataset_attrs, get_loader
 from fspace.nn import create_model
 from fspace.utils.training import TrainState
 from fspace.scripts.evaluate import \
@@ -85,7 +84,7 @@ def main(seed=42, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
          dataset=None, ood_dataset=None, ctx_dataset=None,
          augment=True, train_subset=1.,
-         batch_size=128, context_size=128, num_workers=4,
+         batch_size=128, context_size=128,
          laplace_std=1., reg_scale=1e-4,
          optimizer_type='sgd', lr=.1, alpha=0., momentum=.9, weight_decay=0., epochs=0):
 
@@ -113,25 +112,23 @@ def main(seed=42, log_dir=None, data_dir=None,
 
     rng = jax.random.PRNGKey(seed)
 
-    train_data, val_data, test_data = get_dataset(dataset, root=data_dir, seed=seed,
+    train_data, val_data, test_data = get_dataset(dataset, root=data_dir, seed=seed, channels_last=True,
                                                   augment=bool(augment), train_subset=train_subset)
-    train_loader = DataLoader(train_data, batch_size=batch_size, num_workers=num_workers,
-                              shuffle=True)
-    val_loader = DataLoader(val_data, batch_size=batch_size, num_workers=num_workers) if val_data is not None else None
-    test_loader = DataLoader(test_data, batch_size=batch_size, num_workers=num_workers)
+    train_loader = get_loader(train_data, batch_size=batch_size, shuffle=True)
+    val_loader = get_loader(val_data, batch_size=batch_size) if val_data is not None else None
+    test_loader = get_loader(test_data, batch_size=batch_size)
 
     context_loader = None
     if ctx_dataset is not None:
-        context_data, _, _ = get_dataset(ctx_dataset, root=data_dir, seed=seed,
-                                         normalize=get_dataset_normalization(dataset),
+        context_data, _, _ = get_dataset(ctx_dataset, root=data_dir, seed=seed, channels_last=True,
+                                         normalize=get_dataset_attrs(dataset).get('normalize'),
                                          ref_tensor=train_data[0][0])
 
-        context_loader = DataLoader(context_data, batch_size=context_size, num_workers=num_workers,
-                                    shuffle=True)
+        context_loader = get_loader(context_data, batch_size=context_size, shuffle=True)
 
     rng, model_rng = jax.random.split(rng)
     model, init_params, init_vars = create_model(model_rng, model_name, train_data[0][0].numpy()[None, ...],
-                                                 num_classes=train_data.n_classes, ckpt_path=ckpt_path)
+                                                 num_classes=get_dataset_attrs(dataset).get('num_classes'), ckpt_path=ckpt_path)
 
     if optimizer_type == 'sgd':
         optimizer = optax.chain(
@@ -170,9 +167,9 @@ def main(seed=42, log_dir=None, data_dir=None,
     ## Full evaluation only at the end of training.
     ood_test_loader = None
     if ood_dataset is not None:
-        _, _, ood_test_data = get_dataset(ood_dataset, root=data_dir, seed=seed,
-                                          normalize=get_dataset_normalization(dataset))
-        ood_test_loader = DataLoader(ood_test_data, batch_size=batch_size, num_workers=num_workers)
+        _, _, ood_test_data = get_dataset(ood_dataset, root=data_dir, seed=seed, channels_last=True,
+                                          normalize=get_dataset_attrs(dataset).get('normalize'))
+        ood_test_loader = get_loader(ood_test_data, batch_size=batch_size)
 
     full_eval_model(compute_prob_fn(model, train_state.params, train_state.extra_vars),
                     train_loader, test_loader, val_loader=val_loader, ood_loader=ood_test_loader,

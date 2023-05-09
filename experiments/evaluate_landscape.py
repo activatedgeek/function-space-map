@@ -1,7 +1,6 @@
 import logging
 from functools import partial
 from pathlib import Path
-from torch.utils.data import DataLoader
 import jax
 import jax.numpy as jnp
 import optax
@@ -9,7 +8,7 @@ from tqdm.auto import tqdm
 
 from fspace.nn import create_model
 from fspace.utils.logging import set_logging, wandb
-from fspace.datasets import get_dataset
+from fspace.datasets import get_dataset, get_dataset_attrs, get_loader
 
 
 @partial(jax.jit, static_argnames=['std', 'step_lim', 'n_steps'])
@@ -21,7 +20,7 @@ def perturb_params(key, params, std=1., step_lim=1., n_steps=10):
         rv = rv / jnp.linalg.norm(rv)
         return tree_unflatten_fn(rv)
     
-    step_sizes = jnp.linspace(-step_lim, step_lim, 1 + n_steps) ## additional 1 gets us 0. when n_steps is even, i.e. no perturbation.
+    step_sizes = jnp.linspace(-step_lim, step_lim, n_steps + ((n_steps + 1) % 2)) ## additional 1 gets us 0. when n_steps is even, i.e. no perturbation.
     direction = _sample(key, params)
 
     def _perturb(alpha):
@@ -81,7 +80,7 @@ def compute_mutables_fn(model, batch_params, extra_vars,
 def main(seed=None, log_dir=None, data_dir=None,
          model_name=None, ckpt_path=None,
          dataset=None, update_mutables=False,
-         batch_size=128, num_workers=4,
+         batch_size=128,
          step_lim=20., n_directions=1, n_steps=20):
     assert ckpt_path is not None, "Missing checkpoint path."
 
@@ -98,11 +97,11 @@ def main(seed=None, log_dir=None, data_dir=None,
         'n_steps': n_steps,
     })
 
-    train_data, *_ = get_dataset(dataset, augment=False, root=data_dir, seed=seed)
-    train_loader = DataLoader(train_data, batch_size=batch_size, num_workers=num_workers)
+    train_data, *_ = get_dataset(dataset, augment=False, root=data_dir, seed=seed, channels_last=True)
+    train_loader = get_loader(train_data, batch_size=batch_size)
 
     model, params, extra_vars = create_model(None, model_name, train_data[0][0].numpy()[None, ...],
-                                             num_classes=train_data.n_classes, ckpt_path=ckpt_path)
+                                             num_classes=get_dataset_attrs(dataset).get('num_classes'), ckpt_path=ckpt_path)
 
     ## Remove extraneous keys.
     for k in extra_vars.keys():

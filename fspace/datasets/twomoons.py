@@ -5,22 +5,24 @@ from sklearn.datasets import make_moons
 from torchvision import transforms
 
 
+from .registry import register_dataset
+
+__all__ = [
+    'get_twomoons',
+]
+
+
 class TwoMoonsDataset(Dataset):
     def __init__(self, n_samples, split='train', noise=5e-2, random_state=137, transform=None):
         super().__init__()
 
         if split == 'train':
             self.X, self.y = make_moons(n_samples=n_samples, noise=noise, random_state=random_state)
-        elif split == 'test' or split == 'context':
-            x, y = np.linspace(-5, 5, 50), np.linspace(-5, 5, 50)
+        elif split == 'test':
+            x, y = np.linspace(-3, 3, 100), np.linspace(-3, 3, 100)
             xx, yy = np.meshgrid(x, y)
             self.X = np.array((xx.ravel(), yy.ravel())).T
             self.y = np.zeros(len(self.X))  ## Dummy
-
-        if split == 'context':
-            idx = np.random.choice(len(self.X), size=n_samples, replace=False)
-            self.X = self.X[idx]
-            self.y = self.y[idx]
 
         self.transform = transform
     
@@ -34,7 +36,11 @@ class TwoMoonsDataset(Dataset):
         return len(self.X)
 
 
-def get_twomoons(n_samples=200, normalize=None, noise=None, seed=None, **_):
+__TWOMOONS_ATTRS = dict(num_classes=2, normalize= ((0.,), (1.,)))
+
+def get_twomoons(n_samples=100, normalize=None, noise=None, random_state=None, **_):
+    normalize = normalize or __TWOMOONS_ATTRS.get('normalize')
+
     mean, std = normalize
     mean, std = torch.Tensor(mean), torch.Tensor(std)
     _TEST_TRANSFORM = transforms.Compose([
@@ -42,7 +48,7 @@ def get_twomoons(n_samples=200, normalize=None, noise=None, seed=None, **_):
         transforms.Lambda(lambda x: (x - mean) / (std + 1e-6))
     ])
 
-    train_data = TwoMoonsDataset(n_samples, split='train', noise=noise, random_state=seed,
+    train_data = TwoMoonsDataset(n_samples, split='train', noise=noise, random_state=random_state,
                                  transform=_TEST_TRANSFORM)
     test_data = TwoMoonsDataset(n_samples, split='test',
                                 transform=_TEST_TRANSFORM)
@@ -50,15 +56,6 @@ def get_twomoons(n_samples=200, normalize=None, noise=None, seed=None, **_):
     return train_data, None, test_data
 
 
-def get_twomoons_ctx(n_samples=10, normalize=None, random_state=None, **_):
-    mean, std = normalize
-    mean, std = torch.Tensor(mean), torch.Tensor(std)
-    _TEST_TRANSFORM = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Lambda(lambda x: (x - mean) / (std + 1e-6))
-    ])
-
-    ctx_data = TwoMoonsDataset(n_samples, split='context', random_state=random_state,
-                                 transform=_TEST_TRANSFORM)
-
-    return ctx_data
+@register_dataset(attrs=__TWOMOONS_ATTRS, random_state=0, noise=.2)
+def twomoons(*args, **kwargs):
+    return get_twomoons(*args, **kwargs)

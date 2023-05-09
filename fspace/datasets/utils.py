@@ -2,8 +2,21 @@ import os
 import logging
 from pathlib import Path
 import torch
-from torch.utils.data import Dataset, random_split
+from torch.utils.data import Dataset, DataLoader, random_split
 from torch.distributions import Categorical
+
+
+class IndexedDataset(Dataset):
+    def __init__(self, dataset):
+        super().__init__()
+
+        self.dataset = dataset
+    
+    def __len__(self):
+        return len(self.dataset)
+    
+    def __getitem__(self, index):
+        return (*self.dataset[index], index)
 
 
 class WrapperDataset(Dataset):
@@ -85,3 +98,15 @@ def train_test_split(dataset, test_size=.2, seed=None):
         train, test = random_split(dataset, [N, N_test])
 
     return train, test
+
+
+def get_loader(dataset, batch_size=128, num_workers=4, accelerator=None, **kwargs):
+    num_gpus_per_host = torch.cuda.device_count()
+    num_workers = (num_workers + num_gpus_per_host - 1) // num_gpus_per_host
+
+    loader = DataLoader(dataset,
+                        batch_size=batch_size, num_workers=num_workers, **kwargs)
+    if accelerator is not None:
+        loader = accelerator.prepare(loader)
+
+    return loader
