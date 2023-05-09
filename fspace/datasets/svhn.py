@@ -18,7 +18,7 @@ def get_svhn(root=None, seed=42, val_size=0., normalize=None, channels_last=Fals
 
     root (str): Root directory where 'svhn' folder exists or will be downloaded to.
     '''
-
+    normalize = normalize or __SVHN_ATTRS.get('normalize')
 
     _SVHN_TRANSFORM = transforms.Compose([
         transforms.ToTensor(),
