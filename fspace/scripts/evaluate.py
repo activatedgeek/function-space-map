@@ -66,25 +66,37 @@ def full_eval_model(compute_model_p,
                     log_prefix=None):
 
     logging.info(f'Computing train metrics...')
+
     train_p, train_Y = compute_model_p(train_loader)
     train_metrics = eval_classifier(train_p, train_Y)
+
     logging.info(train_metrics, extra=dict(metrics=True, prefix=f'{log_prefix}train'))
+    logging.debug(train_metrics)
 
     logging.info(f'Computing test metrics...')
+
     test_p, test_Y = compute_model_p(test_loader)
     test_metrics = eval_classifier(test_p, test_Y)
+
     logging.info(test_metrics, extra=dict(metrics=True, prefix=f'{log_prefix}test'))
+    logging.debug(test_metrics)
 
     if val_loader is not None:
         logging.info(f'Computing validation metrics...')
+        
         val_p, val_Y = compute_model_p(val_loader)
         val_metrics = eval_classifier(val_p, val_Y)
+        
         logging.info(val_metrics, extra=dict(metrics=True, prefix=f'{log_prefix}val'))
+        logging.debug(val_metrics)
     
     if ood_loader is not None:
         logging.info(f'Computing OOD metrics...')
+        
         ood_p, ood_Y = compute_model_p(ood_loader)
         ood_test_metrics = eval_classifier(ood_p, ood_Y)
         ood_auc = entropy_ood_auc(test_p, ood_p)
+        ood_metrics = { **ood_test_metrics, 'auc': ood_auc }
 
-        logging.info({ **ood_test_metrics, 'auc': ood_auc }, extra=dict(metrics=True, prefix=f'{log_prefix}ood_test'))
+        logging.info(ood_metrics, extra=dict(metrics=True, prefix=f'{log_prefix}ood_test'))
+        logging.debug(ood_metrics)
