@@ -159,6 +159,11 @@ def main(seed=42, log_dir=None, data_dir=None,
             logging.info({ 'epoch': e, **val_metrics }, extra=dict(metrics=True, prefix='val'))
             logging.debug({ 'epoch': e, **val_metrics })
 
+            ## Temporary for logs.
+            # full_eval_model(compute_prob_fn(model, train_state.params, train_state.extra_vars),
+            #                 train_loader, test_loader, val_loader=val_loader,
+            #                 log_prefix='s/')
+
         checkpoints.save_checkpoint(ckpt_dir=log_dir,
                                     target={'params': train_state.params, **train_state.extra_vars},
                                     step=e,
