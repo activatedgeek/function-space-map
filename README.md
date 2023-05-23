@@ -26,15 +26,6 @@ And finally, run
 pip install -e .
 ```
 
-### Manual Changes
-
-To load CIFAR-10 Corrupted configurations from TFDS, the following path is necessary in the `timm` library [parser_factory.py](https://github.com/rwightman/pytorch-image-models/blob/v0.6.7/timm/data/parsers/parser_factory.py#L9):
-
-```diff
-- name = name.split('/', 2)
-+ name = name.split('/', 1)
-```
-
 ## Usage
 
 ### Training L-MAP
@@ -77,8 +68,6 @@ The key arguments are:
 - `--model-name`:  We use `resnet18` (ResNet-18) for all our experiments, same as above.
 - `--ckpt-path`: Path to the directory where the checkpoint is stored, or the checkpoint directly. This is often the prefix of the `--log-dir` reported in the training runs.
 - `--dataset`: The dataset with which the checkpoint was trained (so that the checkpoint parameters can be mapped correctly).
-- `--ood-dataset`: Optionally, evaluate the out-of-distribution detection performance on a target dataset.
-- `--corr-config`: The corruption configuration name for [CIFAR-10 corrupted](https://www.tensorflow.org/datasets/catalog/cifar10_corrupted). Only applicable when `--dataset=cifar10`.
 - `--batch-size`: Batch size used during evaluation. A larger batch size can be used since we do not need memory to preserve computational graphs.
 
 ### Evaluate Landscape
