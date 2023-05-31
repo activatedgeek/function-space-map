@@ -36,13 +36,13 @@ The main file for training `PS-MAP` is [experiments/train_lmap.py](./experiments
 An example command to run the training with FashionMNIST with `PS-MAP` is
 ```shell
 python experiments/train_lmap.py \
-    --dataset=fmnist --ood-dataset=mnist \
+    --dataset=fmnist --ood-dataset=mnist --batch-size=128 \
     --model-name=resnet18 \
-    --batch-size=128 --epochs=50 --lr=0.1 --weight-decay=5e-4 \
-    --seed=173
+     --lr=0.1 --weight-decay=5e-4 \
+    --epochs=50 --seed=173
 ```
 
-See below for a small description of all important arguments:
+See below for a summary of all important arguments:
 - `--dataset`: The training dataset. e.g. `fmnist` (FashionMNIST), `cifar10` (CIFAR-10), etc.
 - `--ood-dataset`: The dataset used to evaluate OOD detection. e.g. `mnist` (MNIST), `svhn` (SVHN), etc.
 - `--model-name`: We use `resnet18` (ResNet-18) for all our experiments.
@@ -55,6 +55,35 @@ See below for a small description of all important arguments:
 In addition, there are a few more helpful arguments:
 - `--log-dir`: Optional, but can be used to change the directory where checkpoints are stored. The full path is reported in the stdout for reference.
 
+
+### Training FSEB
+
+The main file for training `FSEB` is [experiments/train_fprior.py](./experiments/train_fprior.py).
+
+An example command to run the training with FashionMNIST and context set KMNIST is
+```shell
+python experiments/train_fprior.py --method=fsmap --reg_type=function_prior \
+    --dataset=fmnist --context_points=kmnist --ood_points=mnist --batch_size=128 \
+    --model_name=ResNet18 --mc_samples_reg=1 --forward_points=joint \
+    --learning_rate=0.008 --weight_decay=0. --alpha=0.05 \
+    --reg_scale=1. --prior_mean=0. --prior_var=20000 \ 
+    --num_epochs=50 --seed=173
+```
+
+See below for a summary of all important arguments:
+- `--method`: Must be `fsmap`.
+- `--reg_type`: Must be `function_prior`.
+- `--model_name`: We use `ResNet18`.
+- `--mc_samples_reg`: Number of Monte Carlo samples (denote by `J` in the paper, typical value `1`)
+- `--forward_points`: `joint` recommended to allow both training and context minibatch samples to update the BatchNorm parameters (running mean and variance) at train time.
+- `--learning_rate`: Learning rate for SGD.
+- `--weight_decay`: Weight decay for SGD.
+- `--alpha`: Parameter for the cosine scheduler for SGD.
+- `--reg_scale`: Coefficient of the function regularization term.
+- `--prior_mean`: Last layer paramter mean (typically recommended to be zero).
+- `--prior_var`: Prior variance of the last layer parameters.
+- `--num_epochs`: Number of epochs for training.
+- `--seed`: Seed used for model initialization and dataset sampling.
 
 ### Evaluate
 
