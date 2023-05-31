@@ -1,6 +1,7 @@
 # Function-Space Inference
 
-This repository holds the code to run experiments with L-MAP.
+This repository hosts the code for [Function-Space Regularization in Neural Networks: A Probabilistic Perspective]() (FSEB).
+
 
 ## Setup
 
@@ -28,35 +29,30 @@ pip install -e .
 
 ## Usage
 
-### Training L-MAP
+### Training PS-MAP
 
-The main file for training `L-MAP` is [experiments/train_lmap.py](./experiments/train_lmap.py).
+The main file for training `PS-MAP` is [experiments/train_lmap.py](./experiments/train_lmap.py).
 
-An example command to run the training with FashionMNIST with `L-MAP` is
+An example command to run the training with FashionMNIST with `PS-MAP` is
 ```shell
 python experiments/train_lmap.py \
-    --dataset=fmnist --ctx-dataset=kmnist \
+    --dataset=fmnist --ood-dataset=mnist \
     --model-name=resnet18 \
     --batch-size=128 --epochs=50 --lr=0.1 --weight-decay=5e-4 \
-    --laplace-std=0.001 --reg_scale=5e-6 \
     --seed=173
 ```
 
 See below for a small description of all important arguments:
 - `--dataset`: The training dataset. e.g. `fmnist` (FashionMNIST), `cifar10` (CIFAR-10), etc.
-- `--ctx-dataset`: The dataset used for evaluation points. e.g. `kmnist` (KMNIST), `whitenoise` (for White Noise distribution), etc.
+- `--ood-dataset`: The dataset used to evaluate OOD detection. e.g. `mnist` (MNIST), `svhn` (SVHN), etc.
 - `--model-name`: We use `resnet18` (ResNet-18) for all our experiments.
 - `--batch-size`: Size of the minibatch used for each gradient update.
 - `--epochs`: Number of epochs to train for.
 - `--lr`: Learning rate for SGD.
 - `--weight-decay`: Weight decay for SGD.
-- `--laplace-std`: The standard deviation used for the Laplacian estimator. `1e-3` is a good default, and mostly need not be changed.
-- `--reg-scale`: The coefficient used for the Laplacian estimator. Use `0` to revert back to PS-MAP.
 - `--seed`: Seed used for model initialization, and dataset sampling.
 
 In addition, there are a few more helpful arguments:
-- `--context-size`: Size of the sample from the evaluation dataset (`--ctx-dataset` above) to be used for Laplacian estimator. Defaults to `128`.
-- `--label-noise`: A fraction `p` such that `p` fraction of classification labels are reassigned at random.
 - `--log-dir`: Optional, but can be used to change the directory where checkpoints are stored. The full path is reported in the stdout for reference.
 
 

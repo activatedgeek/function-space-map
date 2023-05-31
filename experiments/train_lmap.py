@@ -85,7 +85,7 @@ def main(seed=42, log_dir=None, data_dir=None,
          dataset=None, ood_dataset=None, ctx_dataset=None,
          augment=True, label_noise=0.,
          batch_size=128, context_size=128,
-         laplace_std=1., reg_scale=1e-4,
+         laplace_std=1., reg_scale=0.,
          optimizer_type='sgd', lr=.1, alpha=0., momentum=.9, weight_decay=0., epochs=0):
 
     wandb.config.update({
