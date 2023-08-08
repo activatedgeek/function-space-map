@@ -19,10 +19,11 @@ _CIFAR_AUGMENT_TRANSFORM = [
 __CIFAR10_ATTRS = dict(num_classes=10, normalize=((.4914, .4822, .4465), (.2023, .1994, .2010)))
 
 def get_cifar10(root=None, seed=42, val_size=0., normalize=None, augment=True, channels_last=False,
-                v1=False, corr_config=None, batch_size=128, **_):
+                v1=False, corr_config=None, batch_size=128, resize=32, **_):
     normalize = normalize or __CIFAR10_ATTRS.get('normalize')
 
     _TEST_TRANSFORM = [
+        transforms.Resize(resize),
         transforms.ToTensor(),
         transforms.Normalize(*normalize),
         *([transforms.Lambda(lambda x: x.permute(1, 2, 0))] if channels_last else []),
@@ -59,10 +60,11 @@ def get_cifar10(root=None, seed=42, val_size=0., normalize=None, augment=True, c
 
 __CIFAR100_ATTRS = dict(num_classes=100, normalize=((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)))
 
-def get_cifar100(root=None, seed=42, val_size=0., normalize=None, augment=True, channels_last=False, **_):
+def get_cifar100(root=None, seed=42, val_size=0., normalize=None, augment=True, channels_last=False, resize=32, **_):
     normalize = normalize or __CIFAR100_ATTRS.get('normalize')
 
     _TEST_TRANSFORM = [
+        transforms.Resize(resize),
         transforms.ToTensor(),
         transforms.Normalize(*normalize),
         *([transforms.Lambda(lambda x: x.permute(1, 2, 0))] if channels_last else []),

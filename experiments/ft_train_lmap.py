@@ -1,3 +1,4 @@
+import os
 import logging
 from tqdm.auto import tqdm
 import jax
@@ -8,7 +9,6 @@ import flaxmodels as fm
 
 from fspace.utils.logging import set_logging, wandb
 from fspace.datasets import get_dataset, get_dataset_attrs, get_loader
-from fspace.nn import create_model
 from fspace.utils.training import TrainState
 from fspace.scripts.evaluate import \
     cheap_eval_model, full_eval_model, \
@@ -114,7 +114,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     rng = jax.random.PRNGKey(seed)
 
     train_data, val_data, test_data = get_dataset(dataset, root=data_dir, seed=seed, channels_last=True,
-                                                  augment=bool(augment), label_noise=label_noise)
+                                                  augment=bool(augment), label_noise=label_noise, resize=224)
     train_loader = get_loader(train_data, batch_size=batch_size, shuffle=True)
     val_loader = get_loader(val_data, batch_size=batch_size) if val_data is not None else None
     test_loader = get_loader(test_data, batch_size=batch_size)
@@ -123,16 +123,16 @@ def main(seed=42, log_dir=None, data_dir=None,
     if ctx_dataset is not None:
         context_data, _, _ = get_dataset(ctx_dataset, root=data_dir, seed=seed, channels_last=True,
                                          normalize=get_dataset_attrs(dataset).get('normalize'),
-                                         ref_tensor=train_data[0][0])
+                                         ref_tensor=train_data[0][0], resize=224)
 
         context_loader = get_loader(context_data, batch_size=context_size, shuffle=True)
 
     rng, model_rng = jax.random.split(rng)
 
     if model_name == "resnet18_pt":
-        model = fm.ResNet18(output='logits', pretrained='imagenet')
+        model = fm.ResNet18(output='logits', pretrained='imagenet', ckpt_dir=os.environ.get("MODELDIR"))
     elif model_name == "resnet50_pt":
-        model = fm.ResNet50(output='logits', pretrained='imagenet')
+        model = fm.ResNet50(output='logits', pretrained='imagenet', ckpt_dir=os.environ.get("MODELDIR"))
     else:
         raise NotImplementedError
     init_vars, init_params = model.init(model_rng, train_data[0][0].numpy()[None, ...]).pop('params')
@@ -180,7 +180,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     ood_test_loader = None
     if ood_dataset is not None:
         _, _, ood_test_data = get_dataset(ood_dataset, root=data_dir, seed=seed, channels_last=True,
-                                          normalize=get_dataset_attrs(dataset).get('normalize'))
+                                          normalize=get_dataset_attrs(dataset).get('normalize'), resize=224)
         ood_test_loader = get_loader(ood_test_data, batch_size=batch_size)
 
     full_eval_model(compute_prob_fn(model, train_state.params, train_state.extra_vars),

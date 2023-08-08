@@ -1,6 +1,7 @@
 import os
 import logging
 from pathlib import Path
+import jax
 import torch
 from torch.utils.data import Dataset, DataLoader, random_split
 from torch.distributions import Categorical
@@ -101,7 +102,7 @@ def train_test_split(dataset, test_size=.2, seed=None):
 
 
 def get_loader(dataset, batch_size=128, num_workers=4, accelerator=None, **kwargs):
-    num_gpus_per_host = torch.cuda.device_count()
+    num_gpus_per_host = jax.device_count()
     num_workers = (num_workers + num_gpus_per_host - 1) // num_gpus_per_host
 
     loader = DataLoader(dataset,
