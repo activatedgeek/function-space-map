@@ -13,13 +13,13 @@ conda env create -f environment.yml -n <env_name>
 Install CUDA-compiled PyTorch version from [here](https://pytorch.org). The codebase
 has been tested with PyTorch version `1.13`.
 ```shell
-pip install 'torch<2.0' torchvision --extra-index-url https://download.pytorch.org/whl/cu118
+pip install 'torch<2.0' torchvision
 ```
 
 Install CUDA-compiled JAX version from [here](https://github.com/google/jax#installation). The
 codebase has been tested with JAX version `0.4`.
 ```shell
-pip install "jax[cuda11_cudnn82]==0.4.6" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+pip install --upgrade "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 ```
 
 And finally, run

@@ -1,4 +1,3 @@
-from collections import defaultdict
 from pathlib import Path
 from uuid import uuid4
 import logging
@@ -44,28 +43,6 @@ class MetricsFileHandler(logging.FileHandler):
             record.msg = {f'{record.prefix}/{k}': v for k, v in record.msg.items()}
         record.msg['timestamp_ns'] = time.time_ns()
         return super().emit(record)
-
-    
-class TensorboardHandler(logging.Handler):
-    from torch.utils.tensorboard import SummaryWriter
-
-    def __init__(self, filename):
-        super().__init__()
-
-        self.writer = SummaryWriter(log_dir=filename)
-        self.step_dict = defaultdict(int)
-
-    def emit(self, record):
-        if hasattr(record, 'prefix'):
-            record.msg = {f'{record.prefix}/{k}': v for k, v in record.msg.items()}
-        # record.msg['timestamp_ns'] = time.time_ns()
-
-        for k, v in record.msg.items():
-            self.step_dict[k] += 1
-            self.writer.add_scalar(k, v, global_step=self.step_dict[k])
-
-    def __del__(self):
-        self.writer.close()
     
 
 def get_log_dir(log_dir=None):
