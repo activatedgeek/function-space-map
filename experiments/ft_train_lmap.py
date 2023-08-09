@@ -114,7 +114,8 @@ def main(seed=42, log_dir=None, data_dir=None,
     rng = jax.random.PRNGKey(seed)
 
     train_data, val_data, test_data = get_dataset(dataset, root=data_dir, seed=seed, channels_last=True,
-                                                  augment=bool(augment), label_noise=label_noise, resize=224)
+                                                  augment=bool(augment), label_noise=label_noise, resize=224,
+                                                  normalize=((0.,), (1.,)))
     train_loader = get_loader(train_data, batch_size=batch_size, shuffle=True)
     val_loader = get_loader(val_data, batch_size=batch_size) if val_data is not None else None
     test_loader = get_loader(test_data, batch_size=batch_size)
@@ -122,7 +123,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     context_loader = None
     if ctx_dataset is not None:
         context_data, _, _ = get_dataset(ctx_dataset, root=data_dir, seed=seed, channels_last=True,
-                                         normalize=get_dataset_attrs(dataset).get('normalize'),
+                                         normalize=((0.,), (1.,)),
                                          ref_tensor=train_data[0][0], resize=224)
 
         context_loader = get_loader(context_data, batch_size=context_size, shuffle=True)
@@ -180,7 +181,7 @@ def main(seed=42, log_dir=None, data_dir=None,
     ood_test_loader = None
     if ood_dataset is not None:
         _, _, ood_test_data = get_dataset(ood_dataset, root=data_dir, seed=seed, channels_last=True,
-                                          normalize=get_dataset_attrs(dataset).get('normalize'), resize=224)
+                                          normalize=((0.,), (1.,)), resize=224)
         ood_test_loader = get_loader(ood_test_data, batch_size=batch_size)
 
     full_eval_model(compute_prob_fn(model, train_state.params, train_state.extra_vars),
