@@ -5,9 +5,10 @@ import jax
 import jax.numpy as jnp
 import optax
 from tqdm.auto import tqdm
+import wandb
 
 from fspace.nn import get_model
-from fspace.utils.logging import set_logging, wandb
+from fspace.utils.logging import entrypoint
 from fspace.datasets import get_dataset, get_dataset_attrs, get_loader
 
 
@@ -130,20 +131,6 @@ def main(seed=None, log_dir=None, data_dir=None,
         logging.info(f'Results shape: {rnd_directions_loss.shape}')
 
 
-def entrypoint(log_dir=None, **kwargs):
-    # jax.distributed.initialize()
-
-    log_dir = None
-    if jax.process_index() == 0:
-        log_dir, finish_logging = set_logging(log_dir=log_dir)
-
-    n_directions = jax.local_device_count()
-    main(**kwargs, n_directions=n_directions, log_dir=log_dir)
-
-    if jax.process_index() == 0:
-        finish_logging()
-
-
 if __name__ == '__main__':
     import fire
-    fire.Fire(entrypoint)
+    fire.Fire(entrypoint(main))

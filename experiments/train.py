@@ -4,8 +4,9 @@ import jax
 import jax.numpy as jnp
 from flax.training import checkpoints
 import optax
+import wandb
 
-from fspace.utils.logging import set_logging, wandb
+from fspace.utils.logging import entrypoint
 from fspace.datasets import get_dataset, get_dataset_attrs, get_loader
 from fspace.nn import get_model
 from fspace.utils.training import TrainState
@@ -182,14 +183,6 @@ def main(seed=42, log_dir=None, data_dir=None,
                     log_prefix='s/')
 
 
-def entrypoint(log_dir=None, **kwargs):
-    log_dir, finish_logging = set_logging(log_dir=log_dir)
-
-    main(**kwargs, log_dir=log_dir)
-
-    finish_logging()
-
-
 if __name__ == '__main__':
     import fire
-    fire.Fire(entrypoint)
+    fire.Fire(entrypoint(main))

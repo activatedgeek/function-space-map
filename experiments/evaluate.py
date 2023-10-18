@@ -1,5 +1,7 @@
+import wandb
+
 from fspace.nn import get_model
-from fspace.utils.logging import set_logging, wandb
+from fspace.utils.logging import entrypoint
 from fspace.datasets import get_dataset, get_dataset_attrs, get_loader
 from fspace.scripts.evaluate import full_eval_model, compute_prob_fn
 
@@ -42,14 +44,6 @@ def main(seed=42, log_dir=None, data_dir=None,
                     log_prefix='s/')
 
 
-def entrypoint(log_dir=None, **kwargs):
-    log_dir, finish_logging = set_logging(log_dir=log_dir)
-
-    main(**kwargs, log_dir=log_dir)
-
-    finish_logging()
-
-
 if __name__ == '__main__':
     import fire
-    fire.Fire(entrypoint)
+    fire.Fire(entrypoint(main))
