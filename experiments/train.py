@@ -7,7 +7,7 @@ import optax
 
 from fspace.utils.logging import set_logging, wandb
 from fspace.datasets import get_dataset, get_dataset_attrs, get_loader
-from fspace.nn import create_model
+from fspace.nn import get_model
 from fspace.utils.training import TrainState
 from fspace.scripts.evaluate import \
     cheap_eval_model, full_eval_model, \
@@ -127,8 +127,9 @@ def main(seed=42, log_dir=None, data_dir=None,
         context_loader = get_loader(context_data, batch_size=context_size, shuffle=True)
 
     rng, model_rng = jax.random.split(rng)
-    model, init_params, init_vars = create_model(model_rng, model_name, train_data[0][0].numpy()[None, ...],
-                                                 num_classes=get_dataset_attrs(dataset).get('num_classes'), ckpt_path=ckpt_path)
+    model, init_params, init_vars = get_model(model_name, model_dir=ckpt_path,
+                                              num_classes=get_dataset_attrs(dataset).get('num_classes'),
+                                              inputs=train_data[0][0].numpy()[None, ...], init_rng=model_rng)
 
     if optimizer_type == 'sgd':
         optimizer = optax.chain(

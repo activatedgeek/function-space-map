@@ -1,5 +1,7 @@
 from flax import linen as nn
 
+from .registry import register_model
+
 
 class SmallCNN(nn.Module):
   num_classes: int
@@ -34,3 +36,13 @@ class TinyCNN(nn.Module):
     x = nn.elu(x)
     x = nn.Dense(features=self.num_classes)(x)
     return x
+
+
+@register_model
+def smallcnn(**kwargs):
+    return SmallCNN(**kwargs)
+
+
+@register_model
+def tinycnn(**kwargs):
+    return TinyCNN(**kwargs)

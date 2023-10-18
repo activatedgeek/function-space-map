@@ -1,4 +1,4 @@
-from fspace.nn import create_model
+from fspace.nn import get_model
 from fspace.utils.logging import set_logging, wandb
 from fspace.datasets import get_dataset, get_dataset_attrs, get_loader
 from fspace.scripts.evaluate import full_eval_model, compute_prob_fn
@@ -33,8 +33,9 @@ def main(seed=42, log_dir=None, data_dir=None,
                                           normalize=get_dataset_attrs(dataset).get('normalize'))
         ood_test_loader = get_loader(ood_test_data, batch_size=batch_size)
 
-    model, params, extra_vars = create_model(None, model_name, train_data[0][0].numpy()[None, ...],
-                                             num_classes=get_dataset_attrs(dataset).get('num_classes'), ckpt_path=ckpt_path)
+    model, params, extra_vars = get_model(model_name, model_dir=ckpt_path,
+                                          num_classes=get_dataset_attrs(dataset).get('num_classes'),
+                                          inputs=train_data[0][0].numpy()[None, ...])
 
     full_eval_model(compute_prob_fn(model, params, extra_vars),
                     train_loader, test_loader, val_loader=val_loader, ood_loader=ood_test_loader,

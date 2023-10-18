@@ -2,6 +2,8 @@ from functools import partial
 from flax import linen as nn
 from typing import Callable
 
+from .registry import register_model
+
 
 class TinyMLP(nn.Module):
   num_classes: int
@@ -21,6 +23,15 @@ class TinyMLP(nn.Module):
     return nn.Sequential(layers)(x)
 
 
-MLP200 = partial(TinyMLP, hidden_size=200)
+@register_model
+def mlp200(**kwargs):
+    MLP200 = partial(TinyMLP, hidden_size=200)
+    return MLP200(**kwargs)
 
-MLP16_2 = partial(TinyMLP, hidden_size=16, n_layers=2)
+
+@register_model
+def mlp16_2(**kwargs):
+    MLP16_2 = partial(TinyMLP, hidden_size=16, n_layers=2)
+    return MLP16_2(**kwargs)
+
+

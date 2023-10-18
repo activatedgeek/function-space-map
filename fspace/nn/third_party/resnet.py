@@ -1,6 +1,8 @@
 from functools import partial
 from flax import linen as nn
 
+from ..registry import register_model
+
 
 resnet_kernel_init = nn.initializers.variance_scaling(0.1, mode='fan_in', distribution='uniform')
 # resnet_kernel_init = nn.initializers.he_normal()
@@ -68,17 +70,36 @@ class ResNet(nn.Module):
         return x
 
 
-ResNet9 = partial(ResNet, act_fn=nn.relu, block_class=ResNetBlock,
-                  num_blocks=(3, 3, 3), c_hidden=(16, 32, 64))
+@register_model
+def resnet9(**kwargs):
+    ResNet9 = partial(ResNet, act_fn=nn.relu, block_class=ResNetBlock,
+                    num_blocks=(3, 3, 3), c_hidden=(16, 32, 64))
+    return ResNet9(**kwargs)
 
-ResNet18 = partial(ResNet, act_fn=nn.relu, block_class=ResNetBlock,
-                   num_blocks=(2, 2, 2, 2), c_hidden=(64, 128, 256, 512))
 
-ResNet18e = partial(ResNet, act_fn=nn.elu, block_class=ResNetBlock,
-                   num_blocks=(2, 2, 2, 2), c_hidden=(64, 128, 256, 512))
+@register_model
+def resnet18(**kwargs):
+    ResNet18 = partial(ResNet, act_fn=nn.relu, block_class=ResNetBlock,
+                    num_blocks=(2, 2, 2, 2), c_hidden=(64, 128, 256, 512))
+    return ResNet18(**kwargs)
 
-ResNet18sw = partial(ResNet, act_fn=nn.swish, block_class=ResNetBlock,
-                   num_blocks=(2, 2, 2, 2), c_hidden=(64, 128, 256, 512))
 
-ResNet50 = partial(ResNet, act_fn=nn.relu, block_class=ResNetBlock,
-                   num_blocks=(3, 4, 6, 3), c_hidden=(64, 128, 256, 512))
+@register_model
+def resnet18e(**kwargs):
+    ResNet18e = partial(ResNet, act_fn=nn.elu, block_class=ResNetBlock,
+                    num_blocks=(2, 2, 2, 2), c_hidden=(64, 128, 256, 512))
+    return ResNet18e(**kwargs)
+
+
+@register_model
+def resnet18sw(**kwargs):
+    ResNet18sw = partial(ResNet, act_fn=nn.swish, block_class=ResNetBlock,
+                    num_blocks=(2, 2, 2, 2), c_hidden=(64, 128, 256, 512))
+    return ResNet18sw(**kwargs)
+
+
+@register_model
+def resnet50(**kwargs):
+    ResNet50 = partial(ResNet, act_fn=nn.relu, block_class=ResNetBlock,
+                    num_blocks=(3, 4, 6, 3), c_hidden=(64, 128, 256, 512))
+    return ResNet50(**kwargs)
