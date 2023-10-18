@@ -7,9 +7,9 @@ from torch.utils.data import Subset
 from .utils import get_data_dir, LabelNoiseDataset
 
 __all__ = [
-    'register_dataset',
-    'get_dataset',
-    'get_dataset_attrs',
+    "register_dataset",
+    "get_dataset",
+    "get_dataset_attrs",
 ]
 
 
@@ -21,10 +21,12 @@ def register_dataset(function=None, attrs=None, **d_kwargs):
     def _decorator(f):
         @wraps(f)
         def _wrapper(*args, **kwargs):
-            all_kwargs = { **d_kwargs, **kwargs }
+            all_kwargs = {**d_kwargs, **kwargs}
             return f(*args, **all_kwargs)
 
-        assert _wrapper.__name__ not in __func_map, f'Duplicate registration for "{_wrapper.__name__}"'
+        assert (
+            _wrapper.__name__ not in __func_map
+        ), f'Duplicate registration for "{_wrapper.__name__}"'
 
         __func_map[_wrapper.__name__] = _wrapper
         __attr_map[_wrapper.__name__] = attrs
@@ -53,19 +55,22 @@ def list_datasets():
     return list(__func_map.keys())
 
 
-def get_dataset(dataset, root=None, seed=42,
-                train_subset=1, label_noise=0.,
-                **kwargs):
-    dataset_fn = get_dataset_fn(dataset)
+def get_dataset(dataset, root=None, seed=42, train_subset=1, label_noise=0, **kwargs):
+    dataset_fn = get_dataset_fn(dataset.split(":")[0])
 
     root = get_data_dir(data_dir=root)
 
-    train_data, val_data, test_data = dataset_fn(root=root, seed=seed, **kwargs)
+    train_data, val_data, test_data = dataset_fn(
+        root=root, seed=seed, dataset_str=dataset, **kwargs
+    )
 
-    if label_noise > 0.:
+    if label_noise > 0:
         train_data = LabelNoiseDataset(
-            train_data, n_labels=get_dataset_attrs(dataset).get('num_classes'),
-            label_noise=label_noise, seed=seed)
+            train_data,
+            n_labels=get_dataset_attrs(dataset).get("num_classes"),
+            label_noise=label_noise,
+            seed=seed,
+        )
 
     if np.abs(train_subset) < 1:
         n = len(train_data)
