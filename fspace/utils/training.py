@@ -14,7 +14,7 @@ class TrainState(train_state.TrainState):
             if isinstance(getattr(self, v), flax.core.FrozenDict)
             or isinstance(getattr(self, v), dict)
         }
-    
+
     @property
     def state_dict(self):
         return {

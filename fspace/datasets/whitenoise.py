@@ -4,7 +4,7 @@ from torch.utils.data import Dataset
 from .registry import register_dataset
 
 __all__ = [
-    'get_whitenoise',
+    "get_whitenoise",
 ]
 
 
@@ -12,8 +12,9 @@ class WhiteNoiseDataset(Dataset):
     def __init__(self, ref_tensor, n=100, seed=None):
         super().__init__()
 
-        self.X = torch.randn(n, *ref_tensor.shape,
-                             generator=torch.Generator().manual_seed(seed))
+        self.X = torch.randn(
+            n, *ref_tensor.shape, generator=torch.Generator().manual_seed(seed)
+        )
 
     def __len__(self):
         return len(self.X)
@@ -24,6 +25,7 @@ class WhiteNoiseDataset(Dataset):
 
 
 __NOISE_ATTRS = dict(num_classes=None)
+
 
 def get_whitenoise(ref_tensor=None, num_samples=None, seed=None, **_):
     ## No val/test splits.

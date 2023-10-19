@@ -61,6 +61,7 @@ class MetricsFileHandler(logging.FileHandler):
         record.msg["timestamp_ns"] = time.time_ns()
         return super().emit(record)
 
+
 def get_log_dir(log_dir=None):
     if log_dir is not None:
         return Path(log_dir)

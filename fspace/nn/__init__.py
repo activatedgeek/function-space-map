@@ -4,6 +4,7 @@ __all__ = [
     "get_model",
 ]
 
+
 def __setup():
     from importlib import import_module
 

@@ -9,55 +9,53 @@ from .third_party.calibration import calibration  ## For external usage.
 
 @jax.jit
 def accuracy(logits_or_p, Y):
-    '''Compute accuracy
+    """Compute accuracy
 
     Arguments:
         logits_or_p: (B, d)
         Y: (B,) integer labels.
-    '''
+    """
     if len(Y) == 0:
-        return 0.
+        return 0.0
     matches = jnp.argmax(logits_or_p, axis=-1) == Y
     return jnp.mean(matches)
 
 
 @jax.jit
 def categorical_nll(logits, Y):
-    '''Negative log-likelihood of categorical distribution.
-    '''
+    """Negative log-likelihood of categorical distribution."""
     return optax.softmax_cross_entropy_with_integer_labels(logits, Y)
 
 
 @jax.jit
 def categorical_nll_with_p(p, Y):
-    '''Negative log-likelihood of categorical distribution.
-    '''
-    return - distrax.Categorical(probs=p).log_prob(Y)
+    """Negative log-likelihood of categorical distribution."""
+    return -distrax.Categorical(probs=p).log_prob(Y)
 
 
 @jax.jit
 def categorical_entropy(p):
-    '''Entropy of categorical distribution.
+    """Entropy of categorical distribution.
 
     Arguments:
         p: (B, d)
-    
+
     Returns:
         (B,)
-    '''
-    return - jnp.sum(p * jnp.log(p + 1e-6), axis=-1)
+    """
+    return -jnp.sum(p * jnp.log(p + 1e-6), axis=-1)
 
 
 # @jax.jit
 def selective_accuracy_auc(p, Y):
-    '''Selective Prediction Accuracy
+    """Selective Prediction Accuracy
     Uses predictive entropy with T thresholds.
     Arguments:
         p: (B, d)
 
     Returns:
         (B,)
-    '''
+    """
 
     thresholds = jnp.concatenate([jnp.linspace(100, 1, 100), jnp.array([0.1])], axis=0)
 
@@ -73,12 +71,12 @@ def selective_accuracy_auc(p, Y):
     values_id = jnp.array(thresholded_accuracies)
 
     auc_sel_id = 0
-    for i in range(len(thresholds)-1):
+    for i in range(len(thresholds) - 1):
         if i == 0:
-            x = 100 - thresholds[i+1]
+            x = 100 - thresholds[i + 1]
         else:
-            x = thresholds[i] - thresholds[i+1]
-        auc_sel_id += (x * values_id[i] + x * values_id[i+1]) / 2
+            x = thresholds[i] - thresholds[i + 1]
+        auc_sel_id += (x * values_id[i] + x * values_id[i + 1]) / 2
 
     return auc_sel_id
 
@@ -92,7 +90,7 @@ def entropy_ood_auc(p, ood_p):
 
     all_ent = jnp.concatenate([ent, ood_ent])
     all_targets = jnp.concatenate([targets, ood_targets])
-    
+
     return roc_auc_score(all_targets, all_ent)
 
 
@@ -104,9 +102,9 @@ def cheap_eval_classifier(all_p, all_Y):
     avg_ent = jnp.mean(categorical_entropy(all_p), axis=0)
 
     return {
-        'acc': acc.item(),
-        'avg_nll': avg_nll.item(),
-        'avg_ent': avg_ent.item(),
+        "acc": acc.item(),
+        "avg_nll": avg_nll.item(),
+        "avg_ent": avg_ent.item(),
     }
 
 
@@ -126,9 +124,9 @@ def eval_classifier(all_p, all_Y):
         ece = jnp.array([jnp.nan])
 
     return {
-        'acc': acc.item(),
-        'sel_acc': sel_acc.item(),
-        'avg_nll': avg_nll.item(),
-        'avg_ent': avg_ent.item(),
-        'ece': ece.item(),
+        "acc": acc.item(),
+        "sel_acc": sel_acc.item(),
+        "avg_nll": avg_nll.item(),
+        "avg_ent": avg_ent.item(),
+        "ece": ece.item(),
     }
