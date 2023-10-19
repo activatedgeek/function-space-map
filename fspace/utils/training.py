@@ -10,10 +10,18 @@ class TrainState(train_state.TrainState):
     def extra_vars(self):
         return {
             v: getattr(self, v)
-            for v in ['batch_stats']
+            for v in ["batch_stats"]
             if isinstance(getattr(self, v), flax.core.FrozenDict)
+            or isinstance(getattr(self, v), dict)
         }
     
+    @property
+    def state_dict(self):
+        return {
+            "params": self.params,
+            **self.extra_vars,
+        }
+
     @classmethod
     def create(cls, *, apply_fn, params, tx=None, **kwargs):
         """Creates a new instance with `step=0` and initialized `opt_state`."""

@@ -7,16 +7,16 @@ from fspace.scripts.evaluate import full_eval_model, compute_prob_fn
 
 
 def main(seed=42, log_dir=None, data_dir=None,
-         model_name=None, ckpt_path=None,
+         model_name=None, model_dir=None,
          dataset=None, ood_dataset=None, corr_config=None,
          batch_size=512):
-    assert ckpt_path is not None, "Missing checkpoint path."
+    assert model_dir is not None, "Missing model path."
 
     wandb.config.update({
         'log_dir': log_dir,
         'seed': seed,
         'model_name': model_name,
-        'ckpt_path': ckpt_path,
+        'model_dir': model_dir,
         'dataset': dataset,
         'corr_config': corr_config,  # CIFAR-10 corruption config name.
         'ood_dataset': ood_dataset,
@@ -35,7 +35,7 @@ def main(seed=42, log_dir=None, data_dir=None,
                                           normalize=get_dataset_attrs(dataset).get('normalize'))
         ood_test_loader = get_loader(ood_test_data, batch_size=batch_size)
 
-    model, params, extra_vars = get_model(model_name, model_dir=ckpt_path,
+    model, params, extra_vars = get_model(model_name, model_dir=model_dir,
                                           num_classes=get_dataset_attrs(dataset).get('num_classes'),
                                           inputs=train_data[0][0].numpy()[None, ...])
 

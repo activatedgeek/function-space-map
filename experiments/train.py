@@ -2,8 +2,8 @@ import logging
 from tqdm.auto import tqdm
 import jax
 import jax.numpy as jnp
-from flax.training import checkpoints
 import optax
+import orbax.checkpoint as ocp
 import wandb
 
 from fspace.utils.logging import entrypoint
@@ -81,8 +81,8 @@ def train_model(rng, state, loader, step_fn, ctx_loader=None, log_dir=None, epoc
     return rng, state
 
 
-def main(seed=42, log_dir=None, data_dir=None,
-         model_name=None, ckpt_path=None,
+def main(seed=42, log_dir=None, save_steps=10, data_dir=None,
+         model_name=None, model_dir=None,
          dataset=None, ood_dataset=None, ctx_dataset=None,
          augment=True, label_noise=0.,
          batch_size=128, context_size=128,
@@ -93,7 +93,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         'log_dir': log_dir,
         'seed': seed,
         'model_name': model_name,
-        'ckpt_path': ckpt_path,
+        'model_dir': model_dir,
         'dataset': dataset,
         'ctx_dataset': ctx_dataset,
         'ood_dataset': ood_dataset,
@@ -128,7 +128,7 @@ def main(seed=42, log_dir=None, data_dir=None,
         context_loader = get_loader(context_data, batch_size=context_size, shuffle=True)
 
     rng, model_rng = jax.random.split(rng)
-    model, init_params, init_vars = get_model(model_name, model_dir=ckpt_path,
+    model, init_params, init_vars = get_model(model_name, model_dir=model_dir,
                                               num_classes=get_dataset_attrs(dataset).get('num_classes'),
                                               inputs=train_data[0][0].numpy()[None, ...], init_rng=model_rng)
 
@@ -152,6 +152,12 @@ def main(seed=42, log_dir=None, data_dir=None,
     step_fn = lambda *args: train_step_fn(*args, laplace_std=laplace_std, reg_scale=reg_scale)
     train_fn = lambda *args, **kwargs: train_model(*args, step_fn, **kwargs)
 
+    checkpointer = ocp.CheckpointManager(
+        log_dir,
+        ocp.PyTreeCheckpointer(),
+        options=ocp.CheckpointManagerOptions(step_prefix="checkpoint"),
+    )
+
     for e in tqdm(range(epochs)):
         rng, train_state = train_fn(rng, train_state, train_loader, ctx_loader=context_loader,
                                     log_dir=log_dir, epoch=e)
@@ -161,15 +167,8 @@ def main(seed=42, log_dir=None, data_dir=None,
             logging.info({ 'epoch': e, **val_metrics }, extra=dict(metrics=True, prefix='val'))
             logging.debug({ 'epoch': e, **val_metrics })
 
-            ## Temporary for logs.
-            # full_eval_model(compute_prob_fn(model, train_state.params, train_state.extra_vars),
-            #                 train_loader, test_loader, val_loader=val_loader,
-            #                 log_prefix='s/')
-
-        checkpoints.save_checkpoint(ckpt_dir=log_dir,
-                                    target={'params': train_state.params, **train_state.extra_vars},
-                                    step=e,
-                                    overwrite=True)
+        if (e + 1) % save_steps == 0:
+            checkpointer.save(e + 1, train_state.state_dict)
 
     ## Full evaluation only at the end of training.
     ood_test_loader = None

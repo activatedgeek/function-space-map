@@ -80,17 +80,17 @@ def compute_mutables_fn(model, batch_params, extra_vars,
 
 
 def main(seed=None, log_dir=None, data_dir=None,
-         model_name=None, ckpt_path=None,
+         model_name=None, model_dir=None,
          dataset=None, update_mutables=False,
          batch_size=128,
          step_lim=20., n_directions=1, n_steps=20):
-    assert ckpt_path is not None, "Missing checkpoint path."
+    assert model_dir is not None, "Missing model path."
 
     wandb.config.update({
         'log_dir': log_dir,
         'seed': seed,
         'model_name': model_name,
-        'ckpt_path': ckpt_path,
+        'model_dir': model_dir,
         'dataset': dataset,
         'update_mutables': bool(update_mutables),
         'batch_size': batch_size,
@@ -102,7 +102,7 @@ def main(seed=None, log_dir=None, data_dir=None,
     train_data, *_ = get_dataset(dataset, augment=False, root=data_dir, seed=seed, channels_last=True)
     train_loader = get_loader(train_data, batch_size=batch_size)
 
-    model, params, extra_vars = get_model(model_name, model_dir=ckpt_path,
+    model, params, extra_vars = get_model(model_name, model_dir=model_dir,
                                           num_classes=get_dataset_attrs(dataset).get('num_classes'),
                                           inputs=train_data[0][0].numpy()[None, ...])
 

@@ -10,17 +10,18 @@ Create a new conda environment (if needed):
 conda env create -f environment.yml -n <env_name>
 ```
 
-Install CPU-only PyTorch version from [here](https://pytorch.org) to avoid CUDA library conflicts. The codebase
-has been tested with PyTorch version `1.13.1`.
+The codebase has been tested with the latest PyTorch.
 ```shell
-pip install 'torch<2.0' torchvision --extra-index-url https://download.pytorch.org/whl/cpu/
+pip install torch torchvision --extra-index-url https://download.pytorch.org/whl/cu118/
 ```
 
 Install CUDA-compiled JAX version from [here](https://github.com/google/jax#installation). The
 codebase has been tested with JAX version `0.4`.
 ```shell
-pip install --upgrade "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+pip install "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 ```
+
+**NOTE**: Use `cuda11_pip` or `cuda12_pip` depending on CUDA versions.
 
 And finally, run
 ```

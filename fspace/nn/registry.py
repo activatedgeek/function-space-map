@@ -4,7 +4,7 @@ from functools import wraps
 import json
 import torch
 import flax
-from flax.training import checkpoints
+import orbax.checkpoint as ocp
 
 
 __all__ = [
@@ -88,20 +88,21 @@ def get_model(
         return model
     elif isinstance(model, flax.linen.Module):
         if model_dir is not None:
-            init_vars = flax.core.frozen_dict.freeze(
-                checkpoints.restore_checkpoint(
-                    ckpt_dir=model_dir, target=None, prefix="checkpoint_"
-                )
+            checkpointer = ocp.CheckpointManager(
+                model_dir,
+                ocp.PyTreeCheckpointer(),
+                options=ocp.CheckpointManagerOptions(step_prefix="checkpoint"),
             )
+            init_vars = checkpointer.restore(checkpointer.latest_step())
 
-            logging.info(f'Loaded checkpoint from "{model_dir}".')
+            logging.info(f'Loaded latest checkpoint from "{model_dir}".')
         else:
             init_vars = model.init(init_rng, inputs)
 
-        other_vars, params = init_vars.pop("params")
+        params = init_vars.pop("params")
 
         logging.info(f'Loaded "{model_name}".')
 
-        return model, params, other_vars
+        return model, params, init_vars
     else:
         raise NotImplementedError

@@ -11,7 +11,8 @@ pandas
 scikit-learn
 opencv-python
 timm
-flax<0.7
+accelerate
+flax
 optax
 distrax
 blackjax
