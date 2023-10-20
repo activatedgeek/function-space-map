@@ -121,7 +121,7 @@ def main(
     label_noise=0.0,
     batch_size=128,
     context_size=128,
-    laplace_std=1.0,
+    laplace_std=1e-3,
     reg_scale=0.0,
     optimizer_type="sgd",
     lr=0.1,

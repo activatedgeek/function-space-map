@@ -155,6 +155,7 @@ def cifar10(*args, **kwargs):
 
 @register_dataset(attrs=__CIFAR10_ATTRS)
 def cifar10_224(*args, **kwargs):
+    kwargs["normalize"] = ((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))
     return get_cifar10(*args, **kwargs, resize=224)
 
 
@@ -178,4 +179,5 @@ def cifar100(*args, **kwargs):
 
 @register_dataset(attrs=__CIFAR100_ATTRS)
 def cifar100_224(*args, **kwargs):
+    kwargs["normalize"] = ((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))
     return get_cifar100(*args, **kwargs, resize=224)
