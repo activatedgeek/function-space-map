@@ -1,13 +1,14 @@
-# Function-Space Inference
+# Should We Learn Most Likely Functions or Parameters?
 
-This repository hosts the code for [Function-Space Regularization in Neural Networks: A Probabilistic Perspective]() (FSEB).
+This repository contains the code for the paper [Should We Learn Most Likely Functions or Parameters?
+](https://github.com/activatedgeek/fspace-inference) (NeurIPS 2023).
 
 
 ## Setup
 
 Create a new conda environment (if needed):
 ```
-conda env create -f environment.yml -n <env_name>
+conda env create -f environment.yml -n fsmap
 ```
 
 The codebase has been tested with the latest PyTorch.
@@ -30,7 +31,16 @@ pip install -e .
 
 ## Usage
 
-### Training PS-MAP
+### Synthetic Experiments
+#### Gaussian Mixture Model Regression (Section 1 & Section 4.3)
+Run notebook [notebooks/gaussian_mixture.ipynb](./notebooks/gaussian_mixture.ipynb).
+#### Fourier Basis Regression (Section 3.3)
+Run notebook [notebooks/fourier.ipynb](./notebooks/fourier.ipynb).
+
+### UCI Regression
+Run notebook [notebooks/uci.ipynb](./notebooks/uci.ipynb).
+
+### Image Classification (TODO)
 
 The main file for training `PS-MAP` is [experiments/train.py](./experiments/train.py).
 
@@ -40,7 +50,8 @@ python experiments/train.py \
     --dataset=fmnist --ood-dataset=mnist --batch-size=128 \
     --model-name=resnet18 \
      --lr=0.1 --weight-decay=5e-4 \
-    --epochs=50 --seed=173
+    --epochs=50 --seed=173 \
+    --log-dir=logs
 ```
 
 See below for a summary of all important arguments:
@@ -53,8 +64,6 @@ See below for a summary of all important arguments:
 - `--weight-decay`: Weight decay for SGD.
 - `--seed`: Seed used for model initialization, and dataset sampling.
 
-In addition, there are a few more helpful arguments:
-- `--log-dir`: Optional, but can be used to change the directory where checkpoints are stored. The full path is reported in the stdout for reference.
 
 ### Evaluate
 

@@ -6,12 +6,13 @@ import optax
 import orbax.checkpoint as ocp
 import wandb
 
+print('jax backend {}'.format(jax.lib.xla_bridge.get_backend().platform))
+print('jax devices {}'.format(jax.devices()))
 from fspace.utils.logging import entrypoint
 from fspace.datasets import get_dataset, get_dataset_attrs, get_loader
 from fspace.nn import get_model
 from fspace.utils.training import TrainState
 from fspace.scripts.evaluate import cheap_eval_model, full_eval_model, compute_prob_fn
-
 
 @jax.jit
 def train_step_fn(rng, state, X, Y, X_ctx, laplace_std=1e-2, reg_scale=1e-4):
