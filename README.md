@@ -31,16 +31,18 @@ pip install -e .
 
 ## Usage
 
-### Synthetic Experiments
-#### Gaussian Mixture Model Regression (Section 1 & Section 4.3)
-Run notebook [notebooks/gaussian_mixture.ipynb](./notebooks/gaussian_mixture.ipynb).
-#### Fourier Basis Regression (Section 3.3)
-Run notebook [notebooks/fourier.ipynb](./notebooks/fourier.ipynb).
+### **Synthetic Experiments**
+- **Gaussian Mixture Model Regression** (Sections 1 & 4.3)  
+  Run `./notebooks/gaussian_mixture.ipynb`
+  
+- **Fourier Basis Regression** (Section 3.3)  
+  Run `./notebooks/fourier.ipynb`
 
-### UCI Regression
-Run notebook [notebooks/uci.ipynb](./notebooks/uci.ipynb).
+### **UCI Regression** (Section 4.5)  
+  Run `./notebooks/uci.ipynb`
 
-### Image Classification (TODO)
+
+### **Image Classification** (Section 4.5)
 
 The main file for training `PS-MAP` is [experiments/train.py](./experiments/train.py).
 
