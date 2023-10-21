@@ -6,8 +6,6 @@ import optax
 import orbax.checkpoint as ocp
 import wandb
 
-print('jax backend {}'.format(jax.lib.xla_bridge.get_backend().platform))
-print('jax devices {}'.format(jax.devices()))
 from fspace.utils.logging import entrypoint
 from fspace.datasets import get_dataset, get_dataset_attrs, get_loader
 from fspace.nn import get_model
