@@ -34,13 +34,15 @@ pip install -e .
 ### **Synthetic Experiments**
 - **Gaussian Mixture Model Regression** (Sections 1 & 4.3)  
   Run `./notebooks/gaussian_mixture.ipynb`
-  
+
 - **Fourier Basis Regression** (Section 3.3)  
   Run `./notebooks/fourier.ipynb`
 
+- **Visualizing Lack of Reparameterization Invariance of PS-MAP** (Appendix A)  
+  Run `./notebooks/reparam.ipynb`
+
 ### **UCI Regression** (Section 4.5)  
   Run `./notebooks/uci.ipynb`
-
 
 ### **Image Classification** (Section 4.5)
 
