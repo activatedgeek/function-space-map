@@ -51,6 +51,13 @@ def get_dataset_attrs(name):
     return __attr_map[name]
 
 
+def set_dataset_attrs(name, attr_dict):
+    if name not in __attr_map:
+        raise ValueError(f'Dataset "{name}" attributes not found.')
+
+    __attr_map[name].update(attr_dict)
+
+
 def list_datasets():
     return list(__func_map.keys())
 

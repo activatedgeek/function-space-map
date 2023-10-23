@@ -1,7 +1,7 @@
 from timm.data import create_dataset
 import torchvision.transforms as transforms
 
-from .registry import register_dataset
+from .registry import register_dataset, set_dataset_attrs
 from .utils import train_test_split
 
 
@@ -155,8 +155,11 @@ def cifar10(*args, **kwargs):
 
 @register_dataset(attrs=__CIFAR10_ATTRS)
 def cifar10_224(*args, **kwargs):
-    kwargs["normalize"] = ((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))
-    return get_cifar10(*args, **kwargs, resize=224)
+    mod_attrs = {"normalize": ((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))}
+
+    set_dataset_attrs("cifar10_224", mod_attrs)
+
+    return get_cifar10(*args, **{**kwargs, **mod_attrs}, resize=224)
 
 
 @register_dataset(attrs=__CIFAR10_ATTRS)
@@ -179,5 +182,8 @@ def cifar100(*args, **kwargs):
 
 @register_dataset(attrs=__CIFAR100_ATTRS)
 def cifar100_224(*args, **kwargs):
-    kwargs["normalize"] = ((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))
-    return get_cifar100(*args, **kwargs, resize=224)
+    mod_attrs = {"normalize": ((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))}
+
+    set_dataset_attrs("cifar100_224", mod_attrs)
+
+    return get_cifar100(*args, **{**kwargs, **mod_attrs}, resize=224)
