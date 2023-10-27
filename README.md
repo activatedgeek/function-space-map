@@ -1,8 +1,23 @@
 # Should We Learn Most Likely Functions or Parameters?
 
 This repository contains the code for the paper [Should We Learn Most Likely Functions or Parameters?
-](https://github.com/activatedgeek/fspace-inference) (NeurIPS 2023).
+](https://github.com/activatedgeek/fspace-inference) by Shikai Qiu, Tim G. J. Rudner, Sanyam Kapoor and Andrew Gordon Wilson (NeurIPS 2023).
 
+<figure>
+  <img src="./figs/top_fig.png" alt="Image">
+  <figcaption> Standard regularized training procedures correspond to learning the most likely parameters of our model given the data and our prior. However, model parameters are of interest only insomuch as they combine with the
+functional form of a model to provide a function that can make good predictions.
+Moreover, the most likely parameters under the parameter posterior do not generally
+correspond to the most likely function induced by the parameter posterior. The aim of this paper is to improve our understanding of what it means to learn most likely functions instead of parameters. We investigate the benefits and drawbacks
+of directly estimating the most likely function implied by the model and the data.
+We show that this procedure leads to pathological solutions when using neural
+networks, and prove conditions under which the procedure is well-behaved, as well
+as a scalable approximation. Under these conditions, we find that function-space
+MAP estimation can lead to flatter minima, better generalization, and improved
+robustness to overfitting. On the other hand, we find that the benefits are small for
+many practical problems, and carefully distinguishing between the two approaches
+becomes less pressing or useful in the absence of a compelling prior. </figcaption>
+</figure>
 
 ## Setup
 
@@ -106,3 +121,14 @@ Alternatively, use multiple runs to get more random directions with different se
 ## LICENSE
 
 Apache 2.0
+
+## Citation
+Please cite our work as:
+```bibtex
+@inproceedings{qiu2023should,
+    title={{Should We Learn Most Likely Functions or Parameters?}},
+    author={Shikai Qiu and Tim G. J. Rudner and Sanyam Kapoor and Andrew Gordon Wilson},
+    booktitle={Advances in Neural Information Processing Systems},
+    year={2023}
+}
+```
