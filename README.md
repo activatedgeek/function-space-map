@@ -14,9 +14,7 @@ We show that this procedure leads to pathological solutions when using neural
 networks, and prove conditions under which the procedure is well-behaved, as well
 as a scalable approximation. Under these conditions, we find that function-space
 MAP estimation can lead to flatter minima, better generalization, and improved
-robustness to overfitting. On the other hand, we find that the benefits are small for
-many practical problems, and carefully distinguishing between the two approaches
-becomes less pressing or useful in the absence of a compelling prior. </figcaption>
+robustness to overfitting. On the other hand, while distinguishing between the two approaches proves valuable when we have highly motivated priors, the advantages are modest in many practical problems with uninformative priors. </figcaption>
 </figure>
 
 ## Setup
