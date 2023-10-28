@@ -64,7 +64,7 @@ The main file for training `PS-MAP` is [experiments/train.py](./experiments/trai
 An example command to run the training with FashionMNIST with `PS-MAP` is
 ```shell
 python experiments/train.py \
-    --dataset=fmnist --ood-dataset=mnist --batch-size=128 \
+    --dataset=fmnist --batch-size=128 \
     --model-name=resnet18 \
      --lr=0.1 --weight-decay=5e-4 \
     --epochs=50 --seed=173 \
@@ -73,7 +73,6 @@ python experiments/train.py \
 
 See below for a summary of all important arguments:
 - `--dataset`: The training dataset. e.g. `fmnist` (FashionMNIST), `cifar10` (CIFAR-10), etc.
-- `--ood-dataset`: The dataset used to evaluate OOD detection. e.g. `mnist` (MNIST), `svhn` (SVHN), etc.
 - `--model-name`: We use `resnet18` (ResNet-18) for all our experiments.
 - `--batch-size`: Size of the minibatch used for each gradient update.
 - `--epochs`: Number of epochs to train for.
@@ -81,6 +80,11 @@ See below for a summary of all important arguments:
 - `--weight-decay`: Weight decay for SGD.
 - `--seed`: Seed used for model initialization, and dataset sampling.
 
+
+#### Transfer Learning
+
+We use pretrained ResNet checkpoints from [Flaxmodels](https://github.com/matthias-wright/flaxmodels). 
+To use them, simply specify `--model-name=resnet50_pt` or `--model-name=resnet18_pt` in conjunction with other arguments above.
 
 ### Evaluate
 
