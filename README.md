@@ -73,11 +73,14 @@ python experiments/train.py \
 
 See below for a summary of all important arguments:
 - `--dataset`: The training dataset. e.g. `fmnist` (FashionMNIST), `cifar10` (CIFAR-10), etc.
+- `--ctx-dataset`: The context dataset.
 - `--model-name`: We use `resnet18` (ResNet-18) for all our experiments.
 - `--batch-size`: Size of the minibatch used for each gradient update.
+- `--context-size`: Size of the minibatch used for each context gradient update.
 - `--epochs`: Number of epochs to train for.
 - `--lr`: Learning rate for SGD.
 - `--weight-decay`: Weight decay for SGD.
+- `--reg_scale`: Regularization scale for use with `L-MAP`. Default `0.0` corresponds to `PS-MAP`.
 - `--seed`: Seed used for model initialization, and dataset sampling.
 
 
@@ -85,6 +88,9 @@ See below for a summary of all important arguments:
 
 We use pretrained ResNet checkpoints from [Flaxmodels](https://github.com/matthias-wright/flaxmodels). 
 To use them, simply specify `--model-name=resnet50_pt` or `--model-name=resnet18_pt` in conjunction with other arguments above.
+
+Note that when using with CIFAR-10, we need to resize the images to `224 x 224` to be compatible with pretraining. We provide the resized versions via the argument `--dataset=cifar10_224`.
+We specify context dataset for `L-MAP` as `--ctx-dataset=cifar100_224`.
 
 ### Evaluate
 
