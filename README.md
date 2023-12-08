@@ -1,7 +1,7 @@
 # Should We Learn Most Likely Functions or Parameters?
 
 This repository contains the code for the paper [Should We Learn Most Likely Functions or Parameters?
-](https://github.com/activatedgeek/fspace-inference) by Shikai Qiu, Tim G. J. Rudner, Sanyam Kapoor and Andrew Gordon Wilson (NeurIPS 2023).
+](https://arxiv.org/abs/2311.15990) by Shikai Qiu, Tim G. J. Rudner, Sanyam Kapoor and Andrew Gordon Wilson (NeurIPS 2023).
 
 <figure>
   <img src="./figs/top_fig.png" alt="Image">
